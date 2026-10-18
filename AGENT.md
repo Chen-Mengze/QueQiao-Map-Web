@@ -1,7 +1,6 @@
 # AGENT.md — QueQiao Map Web 开发引导
 
-> 本文件由 AGENT_GUIDE.md 演进而来，已按 **实际实现** 修正命名与 API（见 §7「与旧引导的差异」）。
-> 动手改代码前先读完本文件；架构权威是 ARCHITECTURE.md。
+> 动手改代码前先读完本文件；设计权威是 ARCHITECTURE.md。
 
 ## 1. 这是什么
 
@@ -83,7 +82,7 @@ gradlew :forge:origin:build -PmcTarget=1.20.1    &REM 指定版本覆盖层
 `server_name/server_version/server_type/timestamp` 由鹊桥自动填充，DTO 里绝不手写。
 JSON 字段名 = 单单词 camelCase 字段（Gson 反射直出，不受命名策略影响）。
 
-## 6. 平台 API 矩阵（已按 2025-10 实况修正）
+## 6. 平台 API 矩阵（已按实况 javap/源码核对）
 
 | 事项 | Forge 1.20.1 (official) | NeoForge 1.21.1 | Fabric 1.20.1 (yarn) |
 |---|---|---|---|
@@ -101,15 +100,9 @@ JSON 字段名 = 单单词 camelCase 字段（Gson 反射直出，不受命名�
 | ResourceKey | ResourceKey.create(Registries.DIMENSION, rl) | 同左 | RegistryKey.of(Registry.DIMENSION_KEY, id) |
 | 配置目录 | FMLPaths.CONFIGDIR | 同名 | FabricLoader.getInstance().getConfigDir() |
 
-## 7. 与旧 AGENT_GUIDE.md 的差异（已修正，勿回退）
+> 命名基线：入口类 MapWeb / MapWebForge / MapWebFabric / MapWebNeoForge；mod id 统一 queqiao_map_web（与包名、gradle.properties、mods.toml 一致）；Fabric 元数据是 fabric.mod.json；全工程 **无 Mixin**；鹊桥 API 使用前必须 javap 核对（见 §3）。
 
-- 入口类名：MapWeb / MapWebForge / MapWebFabric / MapWebNeoForge（不是 MapExt*；MapExtConfig 只是配置类名）。
-- mod id 统一 queqiao_map_web（不是 queqiaomap），与 gradle.properties、Java 包名、mods.toml 一致。
-- Fabric 元数据是 **fabric.mod.json**（fabric.mod.json5 不被 loader 接受；ARCHITECTURE.md 中的 json5 写法是笔误级历史）。
-- 全工程 **无 Mixin**：mixins.json / mixingradle / refmap 已全部移除。
-- 旧引导里「未验证」的鹊桥 API 均已 javap 验证（见 §3）。
-
-## 8. 里程碑
+## 7. 里程碑
 
 - M1 Forge 1.20.1 骨架 + 编译通过 ← 当前位置
 - M2 Fabric 1.20.1：写 fabric/origin/build.gradle（fabric-loom），放开 settings.gradle include，
@@ -119,7 +112,7 @@ JSON 字段名 = 单单词 camelCase 字段（Gson 反射直出，不受命名�
 - M5 AstrBot 侧 MapDataHandler（Python，不在本仓库）
 - M6 开整备：LICENSE / README / CI
 
-## 9. 代码风格
+## 8. 代码风格
 
 Java 17 语法为上限（仅 1.21.x 分支可用 21）；origin 包零 MC import、零第三方（只用 JDK + 鹊桥接口）；
 日志用 java.util.logging（各分支 Logger 名 = queqiao_map_web.<platform>）；注释中文、标识符英文。

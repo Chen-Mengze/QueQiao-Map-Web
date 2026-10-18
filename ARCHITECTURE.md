@@ -1,6 +1,6 @@
 # QueQiao Map Web — 架构设计书
 
-> 版本 v2 · 类名与 API 均按鹊桥（QueQiao）main 分支源码核对
+> 类名与 API 均按鹊桥（QueQiao）main 分支源码核对，非推断。
 
 ---
 
@@ -104,7 +104,7 @@ public PlayerChatEvent(PlayerModel playerModel, String messageId, String rawMess
 每个平台分支内再按 MC 版本分目录。与鹊桥自身的组织方式一致。
 
 ```
-QueQiao Web Map/
+QueQiao Map Web/
 ├── origin/                              ← 主结构：与 MC 无关的公共业务实现
 │   └── src/main/java/net/yumezawa/queqiao_map_web
 │       ├── MapWeb.java                             生命周期与装配
@@ -133,7 +133,7 @@ QueQiao Web Map/
 │   ├── origin/                                     平台源码（唯一接触 MC 类的地方）
 │   │   ├── MapWebFabric.java                       入口：ModInitializer
 │   │   ├── platform/FabricPlatformAdapter.java
-│   │   └── resources/fabric.mod.json5
+│   │   └── resources/fabric.mod.json
 │   ├── fabric-1.20.1/gradle.properties
 │   ├── fabric-1.20.4/
 │   ├── fabric-1.21.1/
@@ -364,11 +364,11 @@ enabled: false        # 不开则一条新事件都不发
 
 `player_move` / `map_tile` / `map_palette` / `map_dimensions` 与既有取值零冲突，不复用、不改写任何既有事件。
 
-**第 3 层 · 能力协商（v2）**
+**第 3 层 · 能力协商（规划项）**
 
 开启后先低频发 `map_hello`，后端回 `map_subscribe` 才开始推流。老后端不回 → 永远只有无害 hello。
 
-> 当前 `QueQiaoExtension` SPI 只支持"贡献下行 API"、拿不到 `WebsocketManager`，故 v1 先用配置开关；v2 可用 Mixin **注册**一个
+> 当前 `QueQiaoExtension` SPI 只支持"贡献下行 API"、拿不到 `WebsocketManager`，故当前先用配置开关落地；后续可经注册式扩展点**注册**一个
 > api（属"注册"而非"改写"）。
 
 ### AstrBot 插件端：只做加法
