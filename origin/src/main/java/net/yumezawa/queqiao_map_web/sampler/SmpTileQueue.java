@@ -26,6 +26,10 @@ import java.util.logging.Logger;
  * 线程纪律：主线程只做入队与 renderChunk 采样（每 tick 硬上限）；
  * 量化/压缩/发送只在 runAsync 后台线程跑——后台线程绝不触碰 Level/Chunk 对象。
  * EvtMapPalette 必须先于任何 EvtMapTile：首次刷写先发调色板，失败则本批退回队列。
+ *
+ * 线程安全：pending / flushing / paletteSent / capWarned 跨线程共享——
+ * 主线程（enqueue / onTick / drain）与后台 flush 线程（发送失败后的 requeue、调色板标记）
+ * 一律在 lock 上同步；renderChunk 采样在锁外执行以缩短持锁时间。
  */
 public final class SmpTileQueue {
 
@@ -64,6 +68,7 @@ public final class SmpTileQueue {
     private final RndPalette palette;
     private final Supplier<SndEvent> sinkRef;
 
+    private final Object lock = new Object();
     private final LinkedHashMap<String, Entry> pending = new LinkedHashMap<>();
     private long lastFlushMs = System.currentTimeMillis();
     private boolean flushing;
@@ -80,63 +85,87 @@ public final class SmpTileQueue {
     /** 主线程入队（区块加载 / 方块改动事件里调用），去重 */
     public void enqueue(String dimension, ChunkPos pos) {
         if (dimension == null || pos == null) return;
-        if (pending.size() >= config.pendingCap) {
-            if (!capWarned) {
-                capWarned = true;
-                LOG.warning("瓦片队列超过 pending_cap=" + config.pendingCap + "，后续脏区块静默丢弃（后端按底图补齐）");
+        synchronized (lock) {
+            if (pending.size() >= config.pendingCap) {
+                if (!capWarned) {
+                    capWarned = true;
+                    LOG.warning("瓦片队列超过 pending_cap=" + config.pendingCap + "，后续脏区块静默丢弃（后端按底图补齐）");
+                }
+                return;
             }
-            return;
+            Entry e = new Entry(dimension, pos.x, pos.z);
+            pending.putIfAbsent(e.key(), e);
         }
-        Entry e = new Entry(dimension, pos.x, pos.z);
-        pending.putIfAbsent(e.key(), e);
     }
 
     /** 主线程 tick 里调用：判断刷写时机；主线程采样（硬上限内）后把数据交给后台线程打包发送 */
     public void onTick(long nowMs) {
-        if (flushing || pending.isEmpty()) return;
-        boolean sizeTrigger = pending.size() >= config.batchSize;
-        boolean timeTrigger = nowMs - lastFlushMs >= config.flushIntervalMs;
-        if (!sizeTrigger && !timeTrigger) return;
+        List<Entry> picked;
+        synchronized (lock) {
+            if (flushing || pending.isEmpty()) return;
+            boolean sizeTrigger = pending.size() >= config.batchSize;
+            boolean timeTrigger = nowMs - lastFlushMs >= config.flushIntervalMs;
+            if (!sizeTrigger && !timeTrigger) return;
 
-        lastFlushMs = nowMs;
+            lastFlushMs = nowMs;
+            picked = new ArrayList<>();
+            var it = pending.entrySet().iterator();
+            while (it.hasNext() && picked.size() < config.batchSize && picked.size() < config.maxChunkRendersPerTick) {
+                picked.add(it.next().getValue());
+                it.remove();
+            }
+            if (picked.isEmpty()) return;
+            flushing = true;
+        }
+
+        // 主线程采样：唯一允许接触世界数据的地方；锁外执行，后台只短暂抢锁
         List<Captured> batch = new ArrayList<>();
-        var it = pending.entrySet().iterator();
-        while (it.hasNext() && batch.size() < config.batchSize && batch.size() < config.maxChunkRendersPerTick) {
-            Entry e = it.next().getValue();
-            it.remove();
-            byte[] rgb = adapter.renderChunk(e.dimension, new ChunkPos(e.cx, e.cz)); // 主线程：唯一允许接触世界数据的地方
+        for (Entry e : picked) {
+            byte[] rgb = adapter.renderChunk(e.dimension, new ChunkPos(e.cx, e.cz));
             if (rgb != null) batch.add(new Captured(e.dimension, new Sample(e.cx, e.cz, rgb)));
             // null = 区块未加载/已卸载：丢弃；重新加载时 ChunkEvent.Load 会再入队
         }
-        if (batch.isEmpty()) return;
+        if (batch.isEmpty()) {
+            synchronized (lock) {
+                flushing = false;
+            }
+            return;
+        }
 
-        flushing = true;
         adapter.runAsync(() -> {
             try {
                 flush(batch);
             } catch (Throwable t) {
                 LOG.log(Level.FINE, "瓦片刷写失败", t);
             } finally {
-                flushing = false;
+                synchronized (lock) {
+                    flushing = false;
+                }
             }
         });
     }
 
-    /** 关闭时排空（主线程调用） */
+    /** 关闭时排空（主线程调用）：同步发送，不再走 runAsync */
     public void drain() {
-        flushing = false;
-        while (!pending.isEmpty()) {
+        while (true) {
+            List<Entry> picked;
+            synchronized (lock) {
+                if (pending.isEmpty()) return;
+                picked = new ArrayList<>();
+                var it = pending.entrySet().iterator();
+                while (it.hasNext() && picked.size() < config.batchSize) {
+                    picked.add(it.next().getValue());
+                    it.remove();
+                }
+            }
             List<Captured> batch = new ArrayList<>();
-            var it = pending.entrySet().iterator();
-            while (it.hasNext() && batch.size() < config.batchSize) {
-                Entry e = it.next().getValue();
-                it.remove();
+            for (Entry e : picked) {
                 byte[] rgb = adapter.renderChunk(e.dimension, new ChunkPos(e.cx, e.cz));
                 if (rgb != null) batch.add(new Captured(e.dimension, new Sample(e.cx, e.cz, rgb)));
             }
-            if (batch.isEmpty()) continue;
+            if (batch.isEmpty()) continue; // 采到的全是 null：条目已出队，继续清下一批
             try {
-                flush(batch); // 关闭路径同步发送，不再走 runAsync
+                flush(batch);
             } catch (Throwable t) {
                 LOG.log(Level.FINE, "关闭排空失败", t);
                 return;
@@ -146,16 +175,19 @@ public final class SmpTileQueue {
 
     private void flush(List<Captured> batch) {
         SndEvent sink = sinkRef.get();
-        if (!paletteSent) {
-            if (!sink.send(new EvtMapPalette(config.paletteId, palette.colors()))) {
-                requeueEntries(batch); // 通道未就绪：整批退回，下次再刷
-                return;
+        synchronized (lock) {
+            if (!paletteSent) {
+                // 鹊桥 send 只是本地入队（快操作），锁内发送以保证调色板先于任何瓦片
+                if (!sink.send(new EvtMapPalette(config.paletteId, palette.colors()))) {
+                    requeueEntries(batch); // 通道未就绪：整批退回，下次再刷
+                    return;
+                }
+                paletteSent = true;
+                palette.freeze();
             }
-            paletteSent = true;
-            palette.freeze();
         }
 
-        // 按 dimension + 8x8 对齐区域分组
+        // 按 dimension + 8x8 对齐区域分组（batch 为线程私有的已采样数据，锁外打包安全）
         Map<String, List<Captured>> groups = new HashMap<>();
         for (Captured c : batch) {
             String regionKey = c.dimension + '@' + (c.sample.cx() >> 3) + ',' + (c.sample.cz() >> 3);
@@ -191,16 +223,18 @@ public final class SmpTileQueue {
     }
 
     private void requeue(String dimension, List<MdlTilePayload> tiles) {
-        for (MdlTilePayload t : tiles) {
-            if (t.getSize() == 1) {
-                if (pending.size() < config.pendingCap)
-                    pending.putIfAbsent(dimension + '@' + t.getCx() + ',' + t.getCz(), new Entry(dimension, t.getCx(), t.getCz()));
-            } else {
-                for (int dx = 0; dx < t.getSize(); dx++)
-                    for (int dz = 0; dz < t.getSize(); dz++)
-                        if (pending.size() < config.pendingCap)
-                            pending.putIfAbsent(dimension + '@' + (t.getCx() + dx) + ',' + (t.getCz() + dz),
-                                    new Entry(dimension, t.getCx() + dx, t.getCz() + dz));
+        synchronized (lock) {
+            for (MdlTilePayload t : tiles) {
+                if (t.getSize() == 1) {
+                    if (pending.size() < config.pendingCap)
+                        pending.putIfAbsent(dimension + '@' + t.getCx() + ',' + t.getCz(), new Entry(dimension, t.getCx(), t.getCz()));
+                } else {
+                    for (int dx = 0; dx < t.getSize(); dx++)
+                        for (int dz = 0; dz < t.getSize(); dz++)
+                            if (pending.size() < config.pendingCap)
+                                pending.putIfAbsent(dimension + '@' + (t.getCx() + dx) + ',' + (t.getCz() + dz),
+                                        new Entry(dimension, t.getCx() + dx, t.getCz() + dz));
+                }
             }
         }
     }

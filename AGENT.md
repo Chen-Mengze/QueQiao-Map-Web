@@ -6,7 +6,7 @@
 
 把 Minecraft 服务端的「顶层方块地图 + 玩家位置」以事件形式经 **鹊桥（QueQiao）事件桥**
 推给 Web 地图。多加载器（Fabric / Forge / NeoForge）多版本，一套主结构。
-当前里程碑：M1 = Forge 1.20.1 骨架（已接入编译）。
+当前里程碑：M1 = Forge 1.20.1 骨架 ✅（编译通过、jar 产出、reobf 完成、审计修复落地）。
 
 ## 2. 仓库结构（已按此搭建）
 
@@ -99,10 +99,10 @@ JSON 字段名 = 单单词 camelCase 字段（Gson 反射直出，不受命名�
 | 区块 | ChunkEvent.Load | 同名 (…event.level) | ServerChunkEvents.CHUNK_LOAD |
 | 方块破坏 | BlockEvent.BreakEvent | 同名 | PlayerBlockBreakEvents.AFTER |
 | 方块放置 | EntityPlaceEvent（仅带 BlockEntity） | 同名 | 无直接事件（TODO 近似） |
-| Heightmap | Heightmap.Type.OCEAN_FLOOR | Heightmap.**Types**.OCEAN_FLOOR | Heightmap.Type.OCEAN_FLOOR |
+| Heightmap | Heightmap.**Types**.OCEAN_FLOOR（javap 47.4.28 核实：1.20.1 official 即复数 Types） | Heightmap.**Types**.OCEAN_FLOOR | Heightmap.Type.OCEAN_FLOOR（yarn 为单数） |
 | dimension | level.dimension().location() | 同 Forge | world.getRegistryKey().getValue() |
 | 朝向 | getYRot() | getYRot() | getYaw() |
-| RL 构造 | new ResourceLocation(s) | ResourceLocation.parse(s) | new Identifier(s) |
+| RL 构造 | ResourceLocation.tryParse(s)（非法返回 null；单参构造器 47.4.x 已 deprecated-for-removal） | ResourceLocation.parse(s) | new Identifier(s) |
 | ResourceKey | ResourceKey.create(Registries.DIMENSION, rl) | 同左 | RegistryKey.of(Registry.DIMENSION_KEY, id) |
 | 配置目录 | FMLPaths.CONFIGDIR | 同名 | FabricLoader.getInstance().getConfigDir() |
 
@@ -110,9 +110,10 @@ JSON 字段名 = 单单词 camelCase 字段（Gson 反射直出，不受命名�
 
 ## 7. 里程碑
 
-- M1 Forge 1.20.1 骨架 + 编译通过 ← 当前位置
-- M2 Fabric 1.20.1：写 fabric/origin/build.gradle（fabric-loom），放开 settings.gradle include，
-  核对 fabric 各版本覆盖层里的 TODO 版本号
+- M1 Forge 1.20.1 骨架 + 编译通过 ✅（2026-10-19：jar 产出 + reobf；Heightmap 存储值 -1 修正、
+  适配器 register/unregister 生命周期、瓦片队列加锁、鹊桥缺席探针、重启维度基线清空）
+- M2 Fabric 1.20.1 ← 下一站（听用户调度）：写 fabric/origin/build.gradle（fabric-loom），放开 settings.gradle include，
+  核对 fabric 各版本覆盖层里的 TODO 版本号（fabric/origin 已有骨架源码未接入编译）
 - M3 Forge 实战联调（runServer + 鹊桥 + 消费端按 INTEGRATION.md 收事件）
 - M4 NeoForge 1.21.1 / 26.1（ModDevGradle；填 neo_version TODO）
 - M5 开放接入层：4 事件契约冻结 + docs/INTEGRATION.md（接入说明与解析解释；第三方含 owner 自有项目按文档适配）

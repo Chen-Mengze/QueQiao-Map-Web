@@ -76,6 +76,9 @@ public final class QmwLifecycle {
 
         running = true;
         lastDimensionCheckMs = 0;
+        // 单例跨服务端重启复用：维度清单基线必须清空——新会话（新 sink）里
+        // 若与上个会话比对相等，map_dimensions 永远不会重发，Web 端缺清单
+        lastDimensions = List.of();
         bridgeReadyLogged = sinkRef.get().isReady();
         LOG.info("[" + MOD_ID + "] 已启用：platform=" + adapter.platformName()
                 + " sink=" + sinkName() + " batch=" + config.batchSize);

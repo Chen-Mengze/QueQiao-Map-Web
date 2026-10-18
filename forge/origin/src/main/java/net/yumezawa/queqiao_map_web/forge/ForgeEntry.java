@@ -8,15 +8,27 @@ import net.minecraftforge.fml.loading.FMLPaths;
 import net.yumezawa.queqiao_map_web.QmwLifecycle;
 import net.yumezawa.queqiao_map_web.forge.platform.PlatForgeAdapter;
 
+import java.util.logging.Level;
+import java.util.logging.Logger;
+
 /**
  * Forge 1.20.1 入口。加载器入口只做两件事：接加载器生命周期 + 交出适配器。
  * 全部业务在 origin（QmwLifecycle / PlatAdapter 契约内）。
  *
  * 时序铁律：必须在 ServerStartedEvent 之后才 start —— 鹊桥本体的 GlobalContext
  * 在更早的服务端启动阶段 init，过早发送会被 send() 探针挡掉。
+ *
+ * 鹊桥缺席门：origin 的事件类直接 extends 鹊桥 BaseEvent（EvtMapPalette 等）。
+ * 服务端没装 queqiao-tool 时 start() 装配会触发 NoClassDefFoundError 打断服务端，
+ * 违反「默认零行为、绝不抛异常」铁律——ServerStarted 先用 Class.forName 探针，
+ * 桥不在就整体不装配（日志一次 info），适配器与总线钩子都不挂。
  */
 @Mod(QmwLifecycle.MOD_ID)
 public final class ForgeEntry {
+
+    private static final Logger LOG = Logger.getLogger("queqiao_map_web");
+    /** 鹊桥 Tool 的入口事件基类；存在即桥已安装（Forge 默认共享 mod 类加载器可见） */
+    private static final String QUEQIAO_PROBE = "com.github.theword.queqiao.tool.event.base.BaseEvent";
 
     private PlatForgeAdapter adapter;
 
@@ -26,16 +38,26 @@ public final class ForgeEntry {
     }
 
     private void onServerStarted(ServerStartedEvent event) {
+        if (!queqiaoPresent()) return;
         adapter = new PlatForgeAdapter(event.getServer());
         adapter.registerHooks();
         QmwLifecycle.get().start(adapter, FMLPaths.CONFIGDIR.get());
     }
 
     private void onServerStopping(ServerStoppingEvent event) {
+        if (adapter == null) return; // 未装配：无需 stop
         QmwLifecycle.get().stop();
-        if (adapter != null) {
-            adapter.shutdown();
-            adapter = null;
+        adapter.shutdown();
+        adapter = null;
+    }
+
+    private static boolean queqiaoPresent() {
+        try {
+            Class.forName(QUEQIAO_PROBE);
+            return true;
+        } catch (Throwable t) { // 缺席或加载异常都按「桥不在」处理：本 mod 空转
+            LOG.info("未检测到鹊桥 QueQiao Tool，queqiao_map_web 本次会话不启动（零行为）。");
+            return false;
         }
     }
 }
