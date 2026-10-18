@@ -1,6 +1,5 @@
-package net.yumezawa.queqiao_map_web.neoforge.platform;
+package net.yumezawa.queqiao_map_web.forge.platform;
 
-import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
@@ -8,16 +7,15 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.LevelAccessor;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.chunk.LevelChunk;
 import net.minecraft.world.level.levelgen.Heightmap;
-import net.neoforged.bus.api.SubscribeEvent;
-import net.neoforged.neoforge.common.NeoForge;
-import net.neoforged.neoforge.event.entity.EntityPlaceEvent;
-import net.neoforged.neoforge.event.level.BlockEvent;
-import net.neoforged.neoforge.event.level.ChunkEvent;
-import net.neoforged.neoforge.event.tick.ServerTickEvent;
-import net.yumezawa.queqiao_map_web.platform.PlatformAdapter;
+import net.minecraftforge.common.MinecraftForge;
+import net.minecraftforge.event.TickEvent;
+import net.minecraftforge.event.level.BlockEvent;
+import net.minecraftforge.event.level.ChunkEvent;
+import net.yumezawa.queqiao_map_web.platform.PlatAdapter;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -26,11 +24,10 @@ import java.util.concurrent.Executors;
 import java.util.function.Consumer;
 
 /**
- * NeoForge 1.21.1（official mappings）实现 PlatformAdapter。
- * 与 Forge 1.20.1 的主要差异：ServerTickEvent.Post（无 phase 字段）、
- * Heightmap.Types（复数）、ResourceLocation.parse（构造器私有化）。
+ * Forge 1.20.1（official mappings）实现 PlatAdapter。
+ * forge/origin 是本分支唯一接触 net.minecraft.* 的地方；origin 主结构不 import 任何 MC 类。
  */
-public final class NeoForgePlatformAdapter implements PlatformAdapter {
+public final class PlatForgeAdapter implements PlatAdapter {
 
     private final MinecraftServer server;
     private final ExecutorService pool = Executors.newSingleThreadExecutor(r -> {
@@ -42,17 +39,23 @@ public final class NeoForgePlatformAdapter implements PlatformAdapter {
     private Consumer<List<PlayerSnapshot>> tickConsumer;
     private ChunkDirtyListener chunkDirty;
 
-    public NeoForgePlatformAdapter(MinecraftServer server) {
+    public PlatForgeAdapter(MinecraftServer server) {
         this.server = server;
     }
 
+    /** 入口在 ServerStartedEvent 里调用一次：把加载器事件接到本适配器 */
     public void registerHooks() {
-        NeoForge.EVENT_BUS.register(this);
+        MinecraftForge.EVENT_BUS.addListener(this::onServerTick);
+        MinecraftForge.EVENT_BUS.addListener(this::onChunkLoad);
+        MinecraftForge.EVENT_BUS.addListener(this::onBlockBreak);
+        MinecraftForge.EVENT_BUS.addListener(this::onEntityPlace);
     }
 
     public void shutdown() {
         pool.shutdownNow();
     }
+
+    // ---------------- PlatAdapter ----------------
 
     @Override
     public void onTick(Consumer<List<PlayerSnapshot>> consumer) {
@@ -64,11 +67,15 @@ public final class NeoForgePlatformAdapter implements PlatformAdapter {
         this.chunkDirty = cb;
     }
 
+    /**
+     * 主线程采样顶层方块（内存取，不读 region 文件）。
+     * 返回 16*16*3 RGB24，行优先；区块未加载返回 null。
+     */
     @Override
     public byte[] renderChunk(String dimension, ChunkPos pos) {
         ServerLevel level = levelOf(dimension);
         if (level == null) return null;
-        LevelChunk chunk = level.getChunkSource().getChunk(pos.x, pos.z, false);
+        LevelChunk chunk = level.getChunkSource().getChunk(pos.x, pos.z, false); // false：不为采样生成区块
         if (chunk == null) return null;
 
         byte[] rgb = new byte[16 * 16 * 3];
@@ -76,11 +83,10 @@ public final class NeoForgePlatformAdapter implements PlatformAdapter {
             for (int lz = 0; lz < 16; lz++) {
                 int wx = (pos.x << 4) + lx;
                 int wz = (pos.z << 4) + lz;
-                int topY = level.getHeight(Heightmap.Types.OCEAN_FLOOR, wx, wz); // 1.21.1: Types（复数）
-                BlockPos blockPos = new BlockPos(wx, topY, wz);
-                BlockState state = level.getBlockState(blockPos);
-                if (state.isAir()) continue;
-                int color = state.getMapColor(level, blockPos).color() & 0xFFFFFF; // 1.21.1: MapColor 访问器
+                int topY = level.getHeight(Heightmap.Types.OCEAN_FLOOR, wx, wz); // 最高非空气固体方块
+                BlockState state = level.getBlockState(new net.minecraft.core.BlockPos(wx, topY, wz));
+                if (state.isAir()) continue; // 保持 0 = palette 下标 0（未设置）
+                int color = state.getMapColor(level, new net.minecraft.core.BlockPos(wx, topY, wz)).col & 0xFFFFFF;
                 int o = (lz * 16 + lx) * 3;
                 rgb[o] = (byte) ((color >> 16) & 0xFF);
                 rgb[o + 1] = (byte) ((color >> 8) & 0xFF);
@@ -107,12 +113,13 @@ public final class NeoForgePlatformAdapter implements PlatformAdapter {
 
     @Override
     public String platformName() {
-        return "neoforge";
+        return "forge";
     }
 
-    @SubscribeEvent
-    public void onServerTick(ServerTickEvent.Post event) { // 1.21.1：Post 子类，无 phase
-        if (tickConsumer == null) return;
+    // ---------------- 加载器事件 → 契约回调 ----------------
+
+    private void onServerTick(TickEvent.ServerTickEvent event) {
+        if (event.phase != TickEvent.Phase.END || tickConsumer == null) return;
         List<PlayerSnapshot> out = new ArrayList<>();
         for (ServerPlayer p : server.getPlayerList().getPlayers()) {
             PlayerSnapshot s = new PlayerSnapshot();
@@ -122,38 +129,36 @@ public final class NeoForgePlatformAdapter implements PlatformAdapter {
             s.y = p.getY();
             s.z = p.getZ();
             s.yaw = p.getYRot();
-            s.dimension = p.level().dimension().location().toString();
+            s.dimension = p.level().dimension().location().toString(); // registry key，绝不用世界文件夹名
             out.add(s);
         }
         tickConsumer.accept(out);
     }
 
-    @SubscribeEvent
-    public void onChunkLoad(ChunkEvent.Load event) {
+    private void onChunkLoad(ChunkEvent.Load event) {
         markDirtyFromLevel(event.getLevel(), event.getChunk().getPos().x, event.getChunk().getPos().z);
     }
 
-    @SubscribeEvent
-    public void onBlockBreak(BlockEvent.BreakEvent event) {
-        markDirtyFromLevel(event.getLevel(), event.getPos().getX() >> 4, event.getPos().getZ() >> 4);
+    private void onBlockBreak(BlockEvent.BreakEvent event) {
+        markDirtyFromLevel(event.getLevel(),
+                event.getPos().getX() >> 4, event.getPos().getZ() >> 4);
     }
 
-    @SubscribeEvent
-    public void onEntityPlace(EntityPlaceEvent event) {
-        if (event.getBlock() == null) return;
-        markDirtyFromLevel(event.getBlock().getLevel(),
-                event.getBlock().getBlockPos().getX() >> 4, event.getBlock().getBlockPos().getZ() >> 4);
+    private void onEntityPlace(BlockEvent.EntityPlaceEvent event) {
+        markDirtyFromLevel(event.getLevel(),
+                event.getPos().getX() >> 4, event.getPos().getZ() >> 4);
     }
 
-    private void markDirtyFromLevel(Level level, int chunkX, int chunkZ) {
+    /** 事件基类拿到的是 LevelAccessor；只有 ServerLevel 才发脏区块 */
+    private void markDirtyFromLevel(LevelAccessor level, int chunkX, int chunkZ) {
         if (chunkDirty == null || level == null || level.isClientSide()) return;
         if (!(level instanceof ServerLevel sl)) return;
         chunkDirty.onChunkDirty(sl.dimension().location().toString(), new ChunkPos(chunkX, chunkZ));
     }
 
+    /** dimension registry key → ServerLevel；未知/未加载返回 null */
     private ServerLevel levelOf(String dimension) {
-        // 1.21.1：ResourceLocation 构造器私有化，用 parse
-        ResourceKey<Level> key = ResourceKey.create(Registries.DIMENSION, ResourceLocation.parse(dimension));
+        ResourceKey<Level> key = ResourceKey.create(Registries.DIMENSION, new ResourceLocation(dimension));
         return server.getLevel(key);
     }
 }

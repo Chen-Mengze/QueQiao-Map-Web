@@ -8,7 +8,7 @@ import com.github.theword.queqiao.tool.event.base.BaseEvent;
  * 【全工程唯一】允许 import com.github.theword.queqiao.tool.GlobalContext 的文件。
  * 运行期该类由鹊桥本体 jar 提供（编译期 compileOnly libs/queqiao-tool-0.6.8.jar）。
  */
-public final class QueQiaoSink implements EventSink {
+public final class SndQueQiao implements SndEvent {
 
     private static final long PROBE_INTERVAL_MS = 2000;
     private long lastProbeMs;

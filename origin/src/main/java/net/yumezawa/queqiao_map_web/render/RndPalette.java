@@ -6,11 +6,11 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * 共享 256 色调色板：首次刷写瓦片前随 MapPaletteEvent 发送一次，随后冻结。
+ * 共享 256 色调色板：首次刷写瓦片前随 EvtMapPalette 发送一次，随后冻结。
  * 下标 0 固定保留为「未设置」（批量区域里未加载/非脏区块占位）。
  * 冻结后出现的新颜色回退到最近色（RGB 欧氏距离）。
  */
-public final class Palette {
+public final class RndPalette {
 
     public static final int MAX = 256;
     public static final int UNSET = 0;
@@ -20,7 +20,7 @@ public final class Palette {
     private final List<int[]> rgbList = new ArrayList<>();
     private boolean frozen;
 
-    public Palette() {
+    public RndPalette() {
         colors.add("#000000"); // 下标 0 = 未设置
         rgbList.add(new int[]{0, 0, 0});
     }
@@ -55,7 +55,7 @@ public final class Palette {
         return best;
     }
 
-    /** 随 MapPaletteEvent 发送成功后调用：冻结，之后的颜色一律就近取整 */
+    /** 随 EvtMapPalette 发送成功后调用：冻结，之后的颜色一律就近取整 */
     public synchronized void freeze() {
         frozen = true;
     }

@@ -14,7 +14,7 @@ import net.minecraft.util.math.BlockPos;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.chunk.LevelChunk;
 import net.minecraft.world.level.levelgen.Heightmap;
-import net.yumezawa.queqiao_map_web.platform.PlatformAdapter;
+import net.yumezawa.queqiao_map_web.platform.PlatAdapter;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -23,11 +23,11 @@ import java.util.concurrent.Executors;
 import java.util.function.Consumer;
 
 /**
- * Fabric 1.20.1（yarn mappings）实现 PlatformAdapter。
+ * Fabric 1.20.1（yarn mappings）实现 PlatAdapter。
  * 注意 yarn 与 mojmap 命名差异：getYaw（非 getYRot）、getRegistryKey().getValue()（非 dimension().location()）。
  * 1.21.x 用条件块或覆盖文件处理（见 AGENT.md）。
  */
-public final class FabricPlatformAdapter implements PlatformAdapter {
+public final class PlatFabricAdapter implements PlatAdapter {
 
     private final MinecraftServer server;
     private final ExecutorService pool = Executors.newSingleThreadExecutor(r -> {
@@ -39,7 +39,7 @@ public final class FabricPlatformAdapter implements PlatformAdapter {
     private Consumer<List<PlayerSnapshot>> tickConsumer;
     private ChunkDirtyListener chunkDirty;
 
-    public FabricPlatformAdapter(MinecraftServer server) {
+    public PlatFabricAdapter(MinecraftServer server) {
         this.server = server;
         ServerTickEvents.END_SERVER_TICK.register(this::onEndTick);
         ServerChunkEvents.CHUNK_LOAD.register((level, chunk) ->

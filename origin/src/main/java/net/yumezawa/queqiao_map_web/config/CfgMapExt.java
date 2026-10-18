@@ -12,7 +12,7 @@ import java.util.logging.Logger;
  * 本 mod 是鹊桥的附属扩展：鹊桥是唯一发送通道，没有可配置的通道切换。
  * 铁律：enabled 默认 false —— 不开启时本 mod 除一条自检日志外零行为、零流量。
  */
-public final class MapExtConfig {
+public final class CfgMapExt {
 
     public static final String FILE_NAME = "queqiao-mapext.yml";
 
@@ -32,19 +32,19 @@ public final class MapExtConfig {
     public int maxChunkRendersPerTick = 64;
     /** 待刷写队列长度上限，超出静默丢弃并告警一次 */
     public int pendingCap = 1024;
-    /** 调色板标识（随 MapPaletteEvent 发送一次） */
+    /** 调色板标识（随 EvtMapPalette 发送一次） */
     public String paletteId = "vanilla-1.20.1-a";
     /** 维度列表变化检测间隔 */
     public long dimensionCheckIntervalMs = 5000;
 
     private static final Logger LOG = Logger.getLogger("queqiao_map_web.config");
 
-    private MapExtConfig() {
+    private CfgMapExt() {
     }
 
     /** 从 yml 加载；文件不存在时写出默认文件并返回默认值 */
-    public static MapExtConfig load(Path file) {
-        MapExtConfig c = new MapExtConfig();
+    public static CfgMapExt load(Path file) {
+        CfgMapExt c = new CfgMapExt();
         if (!Files.exists(file)) {
             try {
                 if (file.getParent() != null) Files.createDirectories(file.getParent());

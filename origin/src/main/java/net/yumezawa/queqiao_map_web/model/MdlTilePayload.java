@@ -5,7 +5,7 @@ package net.yumezawa.queqiao_map_web.model;
  * format=zlib-pal8：调色板下标（1 字节/像素，下标 0=未设置）按行优先铺成
  * (size*16)^2 字节后 zlib 压缩；sha1 为压缩字节的小写十六进制，供后端去重。
  */
-public final class TilePayloadModel {
+public final class MdlTilePayload {
 
     private final int cx;
     private final int cz;
@@ -14,7 +14,7 @@ public final class TilePayloadModel {
     private final String sha1;
     private final String b64;
 
-    public TilePayloadModel(int cx, int cz, int size, String format, String sha1, String b64) {
+    public MdlTilePayload(int cx, int cz, int size, String format, String sha1, String b64) {
         this.cx = cx;
         this.cz = cz;
         this.size = size;

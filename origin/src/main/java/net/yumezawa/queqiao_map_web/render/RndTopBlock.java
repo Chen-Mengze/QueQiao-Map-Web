@@ -1,7 +1,7 @@
 package net.yumezawa.queqiao_map_web.render;
 
-import net.yumezawa.queqiao_map_web.model.TilePayloadModel;
-import net.yumezawa.queqiao_map_web.platform.PlatformAdapter.ChunkPos;
+import net.yumezawa.queqiao_map_web.model.MdlTilePayload;
+import net.yumezawa.queqiao_map_web.platform.PlatAdapter.ChunkPos;
 
 import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
@@ -17,12 +17,12 @@ import java.util.zip.DeflaterOutputStream;
  * zlib 压缩（format=zlib-pal8）、sha1（压缩字节的小写 hex）与 base64。
  * 绝不用小尺寸 PNG：16x16 PNG 要 938 B，是 zlib 索引的 9 倍。
  */
-public final class TopBlockRenderer {
+public final class RndTopBlock {
 
     public static final String FORMAT = "zlib-pal8";
     private static final int SIDE_CHUNKS = 16;
 
-    private TopBlockRenderer() {
+    private RndTopBlock() {
     }
 
     /**
@@ -33,7 +33,7 @@ public final class TopBlockRenderer {
      * @param size     每边区块数（1 或 8）；网格 (size*16)^2 像素，缺失区块填下标 0
      * @param samples  区域内已采到的区块，chunk 与其 16*16*3 RGB24 数据
      */
-    public static TilePayloadModel pack(int originCx, int originCz, int size, List<Sample> samples, Palette palette) {
+    public static MdlTilePayload pack(int originCx, int originCz, int size, List<Sample> samples, RndPalette palette) {
         int side = size * SIDE_CHUNKS;
         byte[] pal = new byte[side * side]; // 默认 0 = 未设置
 
@@ -54,7 +54,7 @@ public final class TopBlockRenderer {
         }
 
         byte[] deflated = zlib(pal);
-        return new TilePayloadModel(originCx, originCz, size, FORMAT, sha1Hex(deflated), Base64.getEncoder().encodeToString(deflated));
+        return new MdlTilePayload(originCx, originCz, size, FORMAT, sha1Hex(deflated), Base64.getEncoder().encodeToString(deflated));
     }
 
     /** 一个已采样区块：区块坐标 + 16*16*3 RGB24（行优先，左上原点） */

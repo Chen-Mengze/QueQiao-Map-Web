@@ -7,7 +7,7 @@ import java.util.function.Consumer;
  * 平台适配接口（本目录不含任何 net.minecraft.* 类）。
  * origin 主结构与 MC 的唯一边界；由 fabric/origin、forge/origin、neoforge/origin 各实现一份。
  */
-public interface PlatformAdapter {
+public interface PlatAdapter {
 
     final class PlayerSnapshot {
         public String uuid, name;
@@ -55,7 +55,7 @@ public interface PlatformAdapter {
     /**
      * 在【主线程】采样一个区块的顶层方块，返回 16*16*3 的 RGB24 字节（行优先，左上原点）；
      * 区块未加载返回 null。只许从内存取（区块加载/改动时机），禁止读 region 文件。
-     * 量化 / 压缩 / 打包由 origin 的 TopBlockRenderer 在后台线程完成。
+     * 量化 / 压缩 / 打包由 origin 的 RndTopBlock 在后台线程完成。
      */
     byte[] renderChunk(String dimension, ChunkPos pos);
 
