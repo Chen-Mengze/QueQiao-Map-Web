@@ -1,0 +1,21 @@
+plugins {
+    id 'java-library'
+}
+
+group = mod_group_id
+version = mod_version
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(17)
+    }
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    // 编译期只要鹊桥接口；运行期鹊桥类由鹊桥本体 jar 提供 —— 绝不 shade 进来
+    compileOnly files("${rootDir}/libs/queqiao-tool-0.6.8.jar")
+}

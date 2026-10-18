@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "id": "queqiao_map_web",
+  "version": "${version}",
+  "name": "QueQiao Map Web",
+  "description": "把服务端顶层方块地图与玩家位置经鹊桥事件桥推给 Web 地图",
+  "authors": ["陈梦泽"],
+  "license": "MIT",
+  "environment": "server",
+  "entrypoints": {
+    "main": ["net.yumezawa.queqiao_map_web.fabric.MapWebFabric"]
+  },
+  "depends": {
+    "fabricloader": "${loader_version}",
+    "fabric": "${fabric_api_version}",
+    "java": ">=${java_version}",
+    "minecraft": "${minecraft_version_range}"
+  }
+}

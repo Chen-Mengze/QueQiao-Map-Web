@@ -1,0 +1,19 @@
+pluginManagement {
+    repositories {
+        gradlePluginPortal()
+        maven { url = 'https://maven.neoforged.net/releases' }
+    }
+}
+
+plugins {
+    id 'org.gradle.toolchains.foojay-resolver-convention' version '0.7.0'
+}
+
+rootProject.name = 'queqiao_map_web'
+
+include 'origin'          // 主结构：与 MC 无关
+include 'forge:origin'    // M1：Forge 1.20.1（当前唯一接入编译的平台）
+
+// 后续里程碑放开（见 AGENT.md）：
+// include 'fabric:origin'    // M2/M3：还需 fabric/origin/build.gradle（fabric-loom）
+// include 'neoforge:origin'  // M4：还需 neoforge/origin/build.gradle（ModDevGradle）

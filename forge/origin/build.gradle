@@ -1,0 +1,74 @@
+buildscript {
+    repositories {
+        maven { url = 'https://maven.neoforged.net/releases' }
+        gradlePluginPortal()
+    }
+    dependencies {
+        classpath 'net.minecraftforge.gradle:ForgeGradle:6.0.+'
+    }
+}
+
+apply plugin: 'net.minecraftforge.gradle'
+
+// ---- 版本覆盖层：forge-<ver>/ 里只有 gradle.properties（MC 版本 / 映射 / Java 版本）----
+def mcTarget = (findProperty('mcTarget') ?: '1.20.1').toString()
+def overlayFile = new File(rootDir, "forge/forge-${mcTarget}/gradle.properties")
+def overlay = new Properties()
+overlayFile.withInputStream { overlay.load(it) }
+def P = { String k -> overlay.getProperty(k) }
+
+group = mod_group_id
+version = "${mod_version}+mc${P('minecraft_version')}"
+archivesBaseName = mod_id
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(P('java_version') as int)
+    }
+}
+
+minecraft {
+    mappings channel: P('mapping_channel'), version: P('mapping_version')
+    copyIdeResources = true
+    // dev 运行任务（runServer 等）按里程碑需要时再开：
+    // runs { server { workingDirectory project.file('run'); server = true } }
+}
+
+dependencies {
+    implementation project(':origin')
+}
+
+// 主结构类直接并进 mod jar：:origin 无任何 net.minecraft 引用，reobf 不会碰它，
+// 不引 shadow（FG6 + shadow 的 reobf 组合维护成本高）。
+evaluationDependsOn(':origin')
+jar {
+    archiveFileName = "${mod_id}-${version}.jar"
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    from project(':origin').sourceSets.main.output
+    manifest {
+        attributes([
+                'Minecraft-Mod'    : 'true',
+                'Minecraft-Mod-ID' : mod_id,
+                'Minecraft-Mod-Version': version
+        ])
+    }
+}
+
+processResources {
+    var expandProperties = [
+            'mod_id'                : mod_id,
+            'mod_version'           : mod_version,
+            'mod_name'              : mod_name,
+            'mod_license'           : mod_license,
+            'mod_authors'           : mod_authors,
+            'mod_description'       : mod_description,
+            'loader_version_range'  : P('forge_loader_version_range'),
+            'forge_version_range'   : P('forge_version_range'),
+            'minecraft_version_range': P('minecraft_version_range'),
+            'pack_format_number'    : P('pack_format_number')
+    ]
+    inputs.properties expandProperties
+    filesMatching(['META-INF/mods.toml', 'pack.mcmeta']) {
+        expand expandProperties
+    }
+}
