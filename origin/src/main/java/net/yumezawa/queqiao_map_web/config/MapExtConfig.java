@@ -9,20 +9,15 @@ import java.util.logging.Logger;
 /**
  * 扩展配置：开关 / 节流 / 批量参数。
  * 纯 JDK 实现（极简 yml 解析），不依赖任何加载器与 MC 类，三个平台共用。
+ * 本 mod 是鹊桥的附属扩展：鹊桥是唯一发送通道，没有可配置的通道切换。
  * 铁律：enabled 默认 false —— 不开启时本 mod 除一条自检日志外零行为、零流量。
  */
 public final class MapExtConfig {
 
-    public static final String SINK_QUEQIAO = "queqiao";
-    public static final String SINK_STANDALONE = "standalone";
     public static final String FILE_NAME = "queqiao-mapext.yml";
 
     /** 兼容性第 1 层保护：总开关，默认关闭 */
     public boolean enabled = false;
-    /** 发送器：queqiao（首选）| standalone（兜底自建 WS） */
-    public String sink = SINK_QUEQIAO;
-    /** standalone 兜底的 WS 地址，如 ws://127.0.0.1:6199/ws */
-    public String standaloneWsUrl = "";
     /** 一批瓦片的区块数上限（64 = 8x8） */
     public int batchSize = 64;
     /** 距上次刷写超过该毫秒数则强制刷 */
@@ -83,8 +78,6 @@ public final class MapExtConfig {
         try {
             switch (key) {
                 case "enabled" -> enabled = Boolean.parseBoolean(val);
-                case "sink" -> sink = val;
-                case "standalone_ws_url" -> standaloneWsUrl = val;
                 case "batch_size" -> batchSize = Math.max(1, Integer.parseInt(val));
                 case "flush_interval_ms" -> flushIntervalMs = Math.max(100, Long.parseLong(val));
                 case "move_threshold" -> moveThreshold = Double.parseDouble(val);
@@ -103,10 +96,9 @@ public final class MapExtConfig {
     }
 
     private static final String DEFAULT_YML = """
-            # QueQiao Map Web 扩展配置 —— 兼容性第 1 层保护：不打开就一条都不发
+            # QueQiao Map Web 扩展配置（本 mod 为鹊桥附属扩展，鹊桥为唯一通道）
+            # 兼容性第 1 层保护：不打开就一条都不发
             enabled: false
-            sink: queqiao
-            standalone_ws_url: ""
             batch_size: 64
             flush_interval_ms: 1000
             move_threshold: 1.5

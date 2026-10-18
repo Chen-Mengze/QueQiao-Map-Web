@@ -9,7 +9,6 @@ import net.yumezawa.queqiao_map_web.sampler.PositionSampler;
 import net.yumezawa.queqiao_map_web.sampler.TileQueue;
 import net.yumezawa.queqiao_map_web.sender.EventSink;
 import net.yumezawa.queqiao_map_web.sender.QueQiaoSink;
-import net.yumezawa.queqiao_map_web.sender.StandaloneSink;
 
 import java.nio.file.Path;
 import java.util.List;
@@ -22,10 +21,11 @@ import java.util.logging.Logger;
  * MapWebNeoForge）只做两件事——把加载器事件转交给 PlatformAdapter 实现、调用本类的
  * start / stop。所有业务逻辑在这里与 origin 子包里，加载器差异被 PlatformAdapter 抹平。
  *
- * 铁律：
+ * 前置铁律：本 mod 是鹊桥（QueQiao）的附属扩展——鹊桥是唯一发送通道，不存在任何
+ * 兜底/直连通道。鹊桥未就绪时整个数据面休眠（零采样、零渲染、零流量），就绪后自动开启。
+ *
+ * 其余铁律：
  * - enabled=false（默认）时除一条自检日志外零行为、零流量；
- * - 发送只发生在鹊桥 GlobalContext 就绪之后（start 在 ServerStarted 之后调用，
- *   QueQiaoSink.isReady 再做二次探针）；
  * - 发送失败静默丢弃，绝不打断服务端。
  */
 public final class MapWeb {
@@ -43,7 +43,7 @@ public final class MapWeb {
     private final AtomicReference<EventSink> sinkRef = new AtomicReference<>();
 
     private boolean running;
-    private boolean degradedWarned;
+    private boolean bridgeReadyLogged;
     private List<String> lastDimensions = List.of();
     private long lastDimensionCheckMs;
 
@@ -54,7 +54,7 @@ public final class MapWeb {
         return INSTANCE;
     }
 
-    /** 加载器在【服务端启动完成】后调用（鹊桥 GlobalContext 此时已 init） */
+    /** 加载器在【服务端启动完成】后调用（鹊桥 GlobalContext 此时应已 init） */
     public synchronized void start(PlatformAdapter adapter, Path configDir) {
         if (running) return;
         this.adapter = adapter;
@@ -69,15 +69,20 @@ public final class MapWeb {
         this.palette = new Palette();
         this.positionSampler = new PositionSampler(config);
         this.tileQueue = new TileQueue(adapter, config, palette, sinkRef::get);
-        selectSink();
+        sinkRef.set(new QueQiaoSink());
 
         adapter.onTick(this::onServerTick);
         adapter.onChunkDirty((dimension, pos) -> tileQueue.enqueue(dimension, pos));
 
         running = true;
         lastDimensionCheckMs = 0;
+        bridgeReadyLogged = sinkRef.get().isReady();
         LOG.info("[" + MOD_ID + "] 已启用：platform=" + adapter.platformName()
                 + " sink=" + sinkName() + " batch=" + config.batchSize);
+        if (!bridgeReadyLogged) {
+            LOG.warning("未检测到就绪的鹊桥：本 mod 是鹊桥的附属扩展（鹊桥为唯一通道），就绪前保持完全静默。"
+                    + "请确认服务端已安装鹊桥；不需要本功能请把 config/" + MapExtConfig.FILE_NAME + " 的 enabled 保持 false。");
+        }
     }
 
     /** 加载器在服务端停止时调用 */
@@ -92,14 +97,23 @@ public final class MapWeb {
         LOG.info("[" + MOD_ID + "] 已停用。");
     }
 
-    /** 主线程 tick：位置采样 + 瓦片刷写时机 + 维度清单变化 */
+    /** 主线程 tick：鹊桥就绪门 → 位置采样 + 瓦片刷写时机 + 维度清单变化 */
     private void onServerTick(List<PlatformAdapter.PlayerSnapshot> snapshots) {
         long now = System.currentTimeMillis();
         try {
-            maybeSwapSink(now);
+            EventSink sink = sinkRef.get();
+            if (sink == null || !sink.isReady()) {
+                // 鹊桥前置未满足：零采样、零渲染、零流量（isReady 探针 2s 节流，开销可忽略）
+                bridgeReadyLogged = false;
+                return;
+            }
+            if (!bridgeReadyLogged) {
+                bridgeReadyLogged = true;
+                LOG.info("[" + MOD_ID + "] 鹊桥已就绪，事件流开始。");
+            }
 
             var players = positionSampler.sample(snapshots, now);
-            if (!players.isEmpty()) sinkRef.get().send(new PlayerMoveEvent(players));
+            if (!players.isEmpty()) sink.send(new PlayerMoveEvent(players));
 
             tileQueue.onTick(now);
 
@@ -108,33 +122,11 @@ public final class MapWeb {
                 List<String> dims = adapter.listDimensions();
                 if (!dims.equals(lastDimensions)) {
                     lastDimensions = dims;
-                    sinkRef.get().send(new MapDimensionsEvent(dims));
+                    sink.send(new MapDimensionsEvent(dims));
                 }
             }
         } catch (Throwable t) {
             LOG.log(Level.FINE, "tick 处理异常（已吞掉，不影响服务端）", t);
-        }
-    }
-
-    /** sink 选择：queqiao 不可用且配了 standalone_ws_url 时降级 */
-    private void selectSink() {
-        EventSink sink;
-        if (MapExtConfig.SINK_STANDALONE.equalsIgnoreCase(config.sink)) {
-            sink = new StandaloneSink(config.standaloneWsUrl);
-        } else {
-            sink = new QueQiaoSink();
-        }
-        sinkRef.set(sink);
-    }
-
-    /** 运行期探针：鹊桥迟迟不就绪且配了 WS 地址 → 一次性降级 */
-    private void maybeSwapSink(long now) {
-        EventSink current = sinkRef.get();
-        if (current.isReady()) return;
-        if (current instanceof QueQiaoSink && !config.standaloneWsUrl.isEmpty() && !degradedWarned) {
-            degradedWarned = true;
-            LOG.warning("鹊桥通道未就绪，降级到 standalone: " + config.standaloneWsUrl);
-            sinkRef.set(new StandaloneSink(config.standaloneWsUrl));
         }
     }
 
