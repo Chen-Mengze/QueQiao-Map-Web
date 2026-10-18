@@ -29,16 +29,17 @@
 | `map_tile` | dimension + tiles[]：cx / cz / size / format / sha1 / b64 |
 | `map_dimensions` | dimensions[]（连接后一次 + 清单变化重发） |
 
-- **双通道**：默认走鹊桥事件桥（`QueQiaoSink`）；鹊桥缺席或不可用时可降级为直连
-  WebSocket（`StandaloneSink`），由 `config/queqiao-mapext.yml` 的 `sink` 开关控制。
+- **前置鹊桥**：本 mod 是鹊桥的附属扩展，唯一通道是鹊桥事件桥（`QueQiaoSink`）；
+  鹊桥未就绪前完全静默、零流量，不存在降级通道。
 
-本仓库是**服务端 mod 与协议侧**；Web/聊天端的接收渲染由鹊桥机器人侧承担
-（AstrBot 插件接收骨架在本项目里程碑 M5 内提供，默认关闭，对原插件行为零变化）。
+本仓库是**服务端 mod 与协议侧**，不内置接收端：数据结构与 API 对第三方开放——
+JSON 协议契约 + [docs/INTEGRATION.md](docs/INTEGRATION.md)（接入说明与解析解释），
+Web 地图、聊天机器人或自研消费端（含 owner 自有项目）照文档独立适配即可。
 
 ## 代码框架
 
 ```
-服务端事件 → PlatformAdapter（平台契约） → origin 主结构（抽样 / 瓦片队列 / 调色板 / 打包） → EventSink → 鹊桥桥 / WebSocket → Web 端
+服务端事件 → PlatformAdapter（平台契约） → origin 主结构（抽样 / 瓦片队列 / 调色板 / 打包） → QueQiaoSink → 鹊桥事件桥 → 第三方消费端（Web 地图等）
 ```
 
 - `origin/`：主结构，**零 `net.minecraft.*` 引用**——事件定义、抽样、打包、发送全部平台无关。
@@ -66,4 +67,5 @@ JAVA_HOME=<JDK 17>  ./gradlew.bat :origin:build :forge:origin:build
 
 - [ARCHITECTURE.md](ARCHITECTURE.md) —— 设计权威：事实基础、协议契约、带宽实测、风险与里程碑。
 - [AGENT.md](AGENT.md) —— 开发引导（面向 AI 与人类）：发送铁律、平台 API 矩阵、代码风格。
+- [docs/INTEGRATION.md](docs/INTEGRATION.md) —— 第三方接入说明：JSON 契约、字段语义、zlib-pal8 解码步骤。
 

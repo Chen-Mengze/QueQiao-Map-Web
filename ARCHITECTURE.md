@@ -12,8 +12,9 @@
 | Forge    | **仅 1.20.1**                                                          | 不做 1.21+（NeoForge 自 1.20.2 从 Forge 分出） |
 | NeoForge | 1.21.1 · 26.1                                                          | 1.21.1 起                                      |
 
-工作重心是 **模组端**。插件端（Paper/Spigot/Folia）生态已有现成方案，不在主链路内，
-仅提供 AstrBot 侧接收骨架以保持端到端可用。
+工作重心是 **模组端**。插件端（Paper/Spigot/Folia）生态已有现成方案，不在主链路内。
+本仓库只做服务端 mod 与协议侧：**开放数据结构与 API**（4 事件契约 + `docs/INTEGRATION.md`）
+供第三方消费端适配——含 owner 自有项目、AstrBot 插件与任何自研 Web 地图端。
 
 ## 1. 事实基础：不需要 Mixin，也不需要 fork
 
@@ -126,8 +127,7 @@ QueQiao Map Web/
 │       │   └── TopBlockRenderer.java               zlib + sha1 + base64 打包
 │       └── sender/
 │           ├── EventSink.java                      ★ 发送器抽象
-│           ├── QueQiaoSink.java                    首选：GlobalContext.sendEvent
-│           └── StandaloneSink.java                 兜底：自建 WS client
+│           └── QueQiaoSink.java                    唯一实现：GlobalContext.sendEvent（鹊桥前置）
 │
 ├── fabric/                              ← Fabric 分支：1.20.1 起
 │   ├── origin/                                     平台源码（唯一接触 MC 类的地方）
@@ -371,7 +371,7 @@ enabled: false        # 不开则一条新事件都不发
 > 当前 `QueQiaoExtension` SPI 只支持"贡献下行 API"、拿不到 `WebsocketManager`，故当前先用配置开关落地；后续可经注册式扩展点**注册**一个
 > api（属"注册"而非"改写"）。
 
-### AstrBot 插件端：只做加法
+### 消费端（第三方，含 AstrBot 插件）：只做加法
 
 ```python
 async def handle_mc_message(self, raw):
@@ -382,6 +382,8 @@ async def handle_mc_message(self, raw):
 
 `try_handle` 依次检查 `enabled`（默认 False）→ sub_type 白名单 → 全程 `try/except` 兜底， **异常只记 debug，绝不抛回 WS
 接收循环**（否则打断整条连接）。地图/位置数据 **不进 MessageHandler**，不触发 LLM、不转发 QQ。
+
+第三方消费的完整契约（JSON 样例、字段语义、zlib-pal8 解码步骤）见 `docs/INTEGRATION.md`。
 
 ---
 
@@ -402,11 +404,11 @@ async def handle_mc_message(self, raw):
 
 | 阶段 | 内容                                      | 验收                                  |
 |------|-------------------------------------------|---------------------------------------|
-| M1   | Fabric 1.20.1 + `QueQiaoSink` + 位置事件  | 后端收到含 dimension 的 `player_move` |
-| M2   | `TileQueue` + `TopBlockRenderer` + 调色板 | 8×8 批量瓦片到达，sha1 可去重         |
-| M3   | Forge 1.20.1 适配层                       | 同 M1/M2                              |
-| M4   | NeoForge 1.21.1 适配层                    | 同 M1/M2                              |
-| M5   | AstrBot `MapDataHandler`（默认关闭）      | 原插件行为零变化                      |
+| M1   | Forge 1.20.1 骨架 + 编译链（国内镜像）    | mod jar 产出、reobf 完成 ✅           |
+| M2   | Fabric 1.20.1（fabric-loom）+ 位置事件    | 后端收到含 dimension 的 `player_move` |
+| M3   | 实战联调（runServer + 鹊桥 + 消费端）     | 按 `INTEGRATION.md` 解析出地图与位置  |
+| M4   | NeoForge 1.21.1 / 26.1 适配层             | 同 M2/M3                              |
+| M5   | 开放接入层：契约冻结 + `docs/INTEGRATION.md`（接入说明与解析解释） | 第三方（含 owner 自有项目）照文档独立收全 4 事件 |
 | M6   | 开源                                      | README + 协议 spec + 三平台构建       |
 
 ---
@@ -415,8 +417,8 @@ async def handle_mc_message(self, raw):
 
 | 风险                        | 缓解                                                     |
 |-----------------------------|----------------------------------------------------------|
-| 鹊桥升级改 `sendEvent` 签名 | `EventSink` 抽象；坏了切 `StandaloneSink`，业务零改动    |
-| tool 包版本/包名漂移        | 锁 jar 后反编译核对；`QueQiaoSink` 启动自检失败自动降级  |
+| 鹊桥升级改 `sendEvent` 签名 | `EventSink` 抽象；签名漂移只改 `QueQiaoSink` 一个文件，业务零改动 |
+| tool 包版本/包名漂移        | 锁 jar 后反编译核对；探针未就绪则完全静默（零流量）      |
 | 渲染线程开销                | 后台线程池 + 每 tick 渲染区块数硬上限                    |
 | 老插件收到未知事件          | 见第 6 节三层保护                                        |
 | 读 region 与服务器写盘冲突  | **不读 region**；只在区块加载/改动事件时从内存取顶层方块 |
