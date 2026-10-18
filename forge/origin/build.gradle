@@ -62,8 +62,13 @@ jar {
     }
 }
 
+// 元数据模板在 src/main/templates（不在 resources）：用 from-closure 级 ReplaceTokens 过滤。
+// 【勿改回 filesMatching/expand/eachFile】那类 DSL 产生 MatchingCopyAction，IDEA 资源模型
+// 解析不了 → 'Cannot resolve resource filtering of MatchingCopyAction' 告警。
+// resources 目录里的文件全部原样复制（未来 assets/png 放那里，二进制安全）。
+// 注意：M3 开 runServer 时若 FG run 看不到渲染后的模板，需让 runs 依赖 processResources。
 processResources {
-    var expandProperties = [
+    var tokens = [
             'mod_id'                : mod_id,
             'mod_version'           : mod_version,
             'mod_name'              : mod_name,
@@ -74,9 +79,9 @@ processResources {
             'forge_version_range'   : P('forge_version_range'),
             'minecraft_version_range': P('minecraft_version_range'),
             'pack_format_number'    : P('pack_format_number')
-    ]
-    inputs.properties expandProperties
-    filesMatching(['META-INF/mods.toml', 'pack.mcmeta']) {
-        expand expandProperties
+    ].collectEntries { k, v -> [(k): String.valueOf(v)] }
+    inputs.properties tokens
+    from(file('src/main/templates')) {
+        filter org.apache.tools.ant.filters.ReplaceTokens, tokens: tokens
     }
 }
