@@ -1,6 +1,8 @@
 buildscript {
     repositories {
-        maven { url = 'https://maven.neoforged.net/releases' }
+        // FG 6.0.+ 与 forge userdev 制品都在 forge 官方 maven（国内可直连；neoforged maven 被 DNS 污染不用）
+        maven { url = 'https://maven.aliyun.com/repository/public' }
+        maven { url = 'https://maven.minecraftforge.net/' }
         gradlePluginPortal()
     }
     dependencies {
@@ -9,6 +11,11 @@ buildscript {
 }
 
 apply plugin: 'net.minecraftforge.gradle'
+
+// 源码 UTF-8（中文注释），不跟随系统 GBK 默认编码
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+}
 
 // ---- 版本覆盖层：forge-<ver>/ 里只有 gradle.properties（MC 版本 / 映射 / Java 版本）----
 def mcTarget = (findProperty('mcTarget') ?: '1.20.1').toString()
@@ -35,6 +42,7 @@ minecraft {
 }
 
 dependencies {
+    minecraft "net.minecraftforge:forge:${P('minecraft_version')}-${P('forge_version')}"
     implementation project(':origin')
 }
 

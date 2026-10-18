@@ -7,12 +7,12 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.LevelAccessor;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.chunk.LevelChunk;
 import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.event.TickEvent;
-import net.minecraftforge.event.entity.EntityPlaceEvent;
 import net.minecraftforge.event.level.BlockEvent;
 import net.minecraftforge.event.level.ChunkEvent;
 import net.yumezawa.queqiao_map_web.platform.PlatformAdapter;
@@ -83,10 +83,10 @@ public final class ForgePlatformAdapter implements PlatformAdapter {
             for (int lz = 0; lz < 16; lz++) {
                 int wx = (pos.x << 4) + lx;
                 int wz = (pos.z << 4) + lz;
-                int topY = level.getHeight(Heightmap.Type.OCEAN_FLOOR, wx, wz); // 最高非空气固体方块
+                int topY = level.getHeight(Heightmap.Types.OCEAN_FLOOR, wx, wz); // 最高非空气固体方块
                 BlockState state = level.getBlockState(new net.minecraft.core.BlockPos(wx, topY, wz));
                 if (state.isAir()) continue; // 保持 0 = palette 下标 0（未设置）
-                int color = state.getMapColor(level, new net.minecraft.core.BlockPos(wx, topY, wz)).color & 0xFFFFFF;
+                int color = state.getMapColor(level, new net.minecraft.core.BlockPos(wx, topY, wz)).col & 0xFFFFFF;
                 int o = (lz * 16 + lx) * 3;
                 rgb[o] = (byte) ((color >> 16) & 0xFF);
                 rgb[o + 1] = (byte) ((color >> 8) & 0xFF);
@@ -144,13 +144,13 @@ public final class ForgePlatformAdapter implements PlatformAdapter {
                 event.getPos().getX() >> 4, event.getPos().getZ() >> 4);
     }
 
-    private void onEntityPlace(EntityPlaceEvent event) {
-        if (event.getBlock() == null) return; // 只有带 BlockEntity 的放置拿得到位置；其余靠 ChunkEvent/后续版本补
-        markDirtyFromLevel(event.getBlock().getLevel(),
-                event.getBlock().getBlockPos().getX() >> 4, event.getBlock().getBlockPos().getZ() >> 4);
+    private void onEntityPlace(BlockEvent.EntityPlaceEvent event) {
+        markDirtyFromLevel(event.getLevel(),
+                event.getPos().getX() >> 4, event.getPos().getZ() >> 4);
     }
 
-    private void markDirtyFromLevel(Level level, int chunkX, int chunkZ) {
+    /** 事件基类拿到的是 LevelAccessor；只有 ServerLevel 才发脏区块 */
+    private void markDirtyFromLevel(LevelAccessor level, int chunkX, int chunkZ) {
         if (chunkDirty == null || level == null || level.isClientSide()) return;
         if (!(level instanceof ServerLevel sl)) return;
         chunkDirty.onChunkDirty(sl.dimension().location().toString(), new ChunkPos(chunkX, chunkZ));

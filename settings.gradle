@@ -1,7 +1,10 @@
 pluginManagement {
     repositories {
+        // 国内镜像优先：aliyun 代理 gradle 插件门户；services.gradle/maven.neoforged 在本机被 DNS 污染
+        maven { url = 'https://maven.aliyun.com/repository/gradle-plugin' }
+        maven { url = 'https://maven.aliyun.com/repository/public' }
         gradlePluginPortal()
-        maven { url = 'https://maven.neoforged.net/releases' }
+        // M4(NeoForge) 需要时再放开，配代理使用：maven { url = 'https://maven.neoforged.net/releases' }
     }
 }
 
