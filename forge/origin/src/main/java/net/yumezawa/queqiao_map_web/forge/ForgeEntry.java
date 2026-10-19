@@ -33,6 +33,10 @@ public final class ForgeEntry {
     private PlatForgeAdapter adapter;
 
     public ForgeEntry() {
+        // addListener(方法引用) 无需 @SubscribeEvent —— eventbus 6.2.33 字节码 javap 实证：
+        // addListener→checkNotGeneric→getEventClass→addToListeners 全链无注解校验，
+        // isAnnotationPresent(SubscribeEvent) 只存在于 register(Object) 扫描路径；
+        // 且该版本 jar 内根本没有 InvalidSubscriptionException 类。此为 MDK 标准写法。
         MinecraftForge.EVENT_BUS.addListener(this::onServerStarted);
         MinecraftForge.EVENT_BUS.addListener(this::onServerStopping);
     }
@@ -46,8 +50,11 @@ public final class ForgeEntry {
 
     private void onServerStopping(ServerStoppingEvent event) {
         if (adapter == null) return; // 未装配：无需 stop
-        QmwLifecycle.get().stop();
+        // 停服顺序铁律：先静默（摘总线监听 + 后台池排空并等待），再排空队列。
+        // 静默后后台 flush 线程已不存在，drain 的主线程同步发送是唯一发送者，
+        // 不会再与池内残留任务并发调用 GlobalContext.sendEvent（其线程安全未验证）。
         adapter.shutdown();
+        QmwLifecycle.get().stop();
         adapter = null;
     }
 

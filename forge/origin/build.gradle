@@ -44,6 +44,9 @@ minecraft {
 dependencies {
     minecraft "net.minecraftforge:forge:${P('minecraft_version')}-${P('forge_version')}"
     implementation project(':origin')
+    // 与 origin/build.gradle 同款防御：不依赖「forge 侧签名暂不暴露鹊桥类型」的巧合，
+    // compileOnly 显式声明编译期接口（运行期由鹊桥本体提供，绝不进 jar）
+    compileOnly files("${rootDir}/libs/queqiao-tool-0.6.8.jar")
 }
 
 // 主结构类直接并进 mod jar：:origin 无任何 net.minecraft 引用，reobf 不会碰它，

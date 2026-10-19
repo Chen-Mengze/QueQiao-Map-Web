@@ -11,8 +11,10 @@ import com.github.theword.queqiao.tool.event.base.BaseEvent;
 public final class SndQueQiao implements SndEvent {
 
     private static final long PROBE_INTERVAL_MS = 2000;
-    private long lastProbeMs;
-    private boolean ready;
+    // 主线程与后台 flush 线程都会调用 isReady()：volatile 保证探针结果跨线程可见
+    // （两线程同时越过节流各探一次属良性）
+    private volatile long lastProbeMs;
+    private volatile boolean ready;
 
     @Override
     public boolean send(BaseEvent event) {

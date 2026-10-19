@@ -72,6 +72,9 @@ gradlew :forge:origin:build -PmcTarget=1.20.1    &REM 指定版本覆盖层
 7. 线程纪律：主线程只做入队 + `adapter.renderChunk`（每 tick 硬上限 maxChunkRendersPerTick=64）；
    量化/压缩/发送只在 `adapter.runAsync` 后台线程；后台线程绝不触碰 Level/Chunk 对象
    （采样已在主线程 capture 成 RGB24 字节数组）。
+   **停服豁免**：`SmpTileQueue.drain()`（仅 ServerStopping 路径，一次性）在主线程同步采样+压缩+发送，
+   不设每 tick 上限（总量受 pending_cap 封顶）；任一 send 失败立即停止排空、剩余静默丢弃——绝不阻断停服。
+   停服顺序：先 `adapter.shutdown()`（摘监听+后台池排空）再 drain，保证 drain 时唯一发送者是主线程。
 8. dimension 一律 registry key（如 `minecraft:the_nether`），绝不用世界文件夹名。
 9. 协议字段只加不改：`sub_type` 与既有字段语义永不变更，消费端必须忽略未知字段（`docs/INTEGRATION.md` §7）。
 
@@ -105,16 +108,23 @@ JSON 字段名 = 单单词 camelCase 字段（Gson 反射直出，不受命名�
 | RL 构造 | ResourceLocation.tryParse(s)（非法返回 null；单参构造器 47.4.x 已 deprecated-for-removal） | ResourceLocation.parse(s) | new Identifier(s) |
 | ResourceKey | ResourceKey.create(Registries.DIMENSION, rl) | 同左 | RegistryKey.of(Registry.DIMENSION_KEY, id) |
 | 配置目录 | FMLPaths.CONFIGDIR | 同名 | FabricLoader.getInstance().getConfigDir() |
+| 事件注册 | `addListener(方法引用)` 无需 @SubscribeEvent（eventbus 6.2.33 javap 实证：addListener 链无注解校验，注解检查只在 register(Object)；jar 内无 InvalidSubscriptionException） | M4 再核（bus 库版本不同，校验可能更严） | 不适用（回调注册） |
 
 > 命名基线：入口类 QmwLifecycle / ForgeEntry / FabricEntry / NeoForgeEntry；mod id 统一 queqiao_map_web（与包名、gradle.properties、mods.toml 一致）；Fabric 元数据是 fabric.mod.json；全工程 **无 Mixin**；鹊桥 API 使用前必须 javap 核对（见 §3）。
 
 ## 7. 里程碑
 
-- M1 Forge 1.20.1 骨架 + 编译通过 ✅（2026-10-19：jar 产出 + reobf；Heightmap 存储值 -1 修正、
-  适配器 register/unregister 生命周期、瓦片队列加锁、鹊桥缺席探针、重启维度基线清空）
+- M1 Forge 1.20.1 骨架 + 编译通过 ✅（2026-10-19 两轮：jar 产出 + reobf；一轮——Heightmap 存储值 -1 修正、
+  适配器 register/unregister 生命周期、瓦片队列加锁、鹊桥缺席探针、重启维度基线清空；
+  二轮——drain 发送失败出口防停服死循环、停服序「静默→排空」、4 个事件钩子 catch Throwable、
+  isReady 探针 volatile、forge 侧 compileOnly 防御行；另实证驳回「addListener 必须 @SubscribeEvent」误报，见 §6）
 - M2 Fabric 1.20.1 ← 下一站（听用户调度）：写 fabric/origin/build.gradle（fabric-loom），放开 settings.gradle include，
   核对 fabric 各版本覆盖层里的 TODO 版本号（fabric/origin 已有骨架源码未接入编译）
-- M3 Forge 实战联调（runServer + 鹊桥 + 消费端按 INTEGRATION.md 收事件）
+- M3 Forge 实战联调（runServer + 鹊桥 + 消费端按 INTEGRATION.md 收事件）。随办清单：
+  GlobalContext.sendEvent 并发语义与「send=本地入队快操作」假设验证（队列锁内发调色板依赖它）；
+  普通方块放置二级信号（EntityPlaceEvent 仅覆盖 BlockEntity，漏采靠 sha1 去重+区块事件兜底）；
+  ServerStarted 前已加载区块的节流补扫（不补则重启后旧区域空白到玩家回访）；
+  REGION_MERGE_MIN=4 带宽取舍写入 INTEGRATION；mods.toml 可选字段（displayTest/logoFile）
 - M4 NeoForge 1.21.1 / 26.1（ModDevGradle；填 neo_version TODO）
 - M5 开放接入层：4 事件契约冻结 + docs/INTEGRATION.md（接入说明与解析解释；第三方含 owner 自有项目按文档适配）
 - M6 开整备：LICENSE / README / CI

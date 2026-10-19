@@ -164,23 +164,32 @@ public final class SmpTileQueue {
                 if (rgb != null) batch.add(new Captured(e.dimension, new Sample(e.cx, e.cz, rgb)));
             }
             if (batch.isEmpty()) continue; // 采到的全是 null：条目已出队，继续清下一批
+            boolean sent;
             try {
-                flush(batch);
+                sent = flush(batch);
             } catch (Throwable t) {
                 LOG.log(Level.FINE, "关闭排空失败", t);
                 return;
             }
+            if (!sent) {
+                // 通道不可用（鹊桥未就绪或先于本 mod 关闭）：失败批次已退回队列。
+                // 继续循环只会「重采样→再失败→再退回」无限空转，卡死停服主线程——
+                // 立即停止排空，剩余条目静默丢弃（铁律：绝不阻断服务端）。
+                LOG.log(Level.FINE, "排空时通道不可用，剩余瓦片条目丢弃");
+                break;
+            }
         }
     }
 
-    private void flush(List<Captured> batch) {
+    /** @return true = 本批全部发送成功；false = 任一 send 失败（失败部分已退回队列） */
+    private boolean flush(List<Captured> batch) {
         SndEvent sink = sinkRef.get();
         synchronized (lock) {
             if (!paletteSent) {
                 // 鹊桥 send 只是本地入队（快操作），锁内发送以保证调色板先于任何瓦片
                 if (!sink.send(new EvtMapPalette(config.paletteId, palette.colors()))) {
                     requeueEntries(batch); // 通道未就绪：整批退回，下次再刷
-                    return;
+                    return false;
                 }
                 paletteSent = true;
                 palette.freeze();
@@ -211,11 +220,14 @@ public final class SmpTileQueue {
             }
         }
 
+        boolean allSent = true;
         for (Map.Entry<String, List<MdlTilePayload>> dim : tilesByDim.entrySet()) {
             if (!sink.send(new EvtMapTile(dim.getKey(), dim.getValue()))) {
                 requeue(dim.getKey(), dim.getValue()); // 只按坐标退回，下一 tick 主线程重新采样
+                allSent = false;
             }
         }
+        return allSent;
     }
 
     private void requeueEntries(List<Captured> batch) {

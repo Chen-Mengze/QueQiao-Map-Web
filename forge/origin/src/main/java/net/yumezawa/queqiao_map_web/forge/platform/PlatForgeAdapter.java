@@ -25,6 +25,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
+import java.util.logging.Logger;
 
 /**
  * Forge 1.20.1（official mappings, forge 47.4.x）实现 PlatAdapter。
@@ -36,6 +37,8 @@ import java.util.function.Consumer;
  * tryParse 对非法 registry key 返回 null，正好对应「未知/未加载维度」的静默语义。
  */
 public final class PlatForgeAdapter implements PlatAdapter {
+
+    private static final Logger LOG = Logger.getLogger("queqiao_map_web.forge"); // §8：Logger 名 = queqiao_map_web.<platform>
 
     private final MinecraftServer server;
     private final ExecutorService pool = Executors.newSingleThreadExecutor(r -> {
@@ -144,37 +147,54 @@ public final class PlatForgeAdapter implements PlatAdapter {
 
     @SubscribeEvent
     public void onServerTick(TickEvent.ServerTickEvent event) {
-        if (event.phase != TickEvent.Phase.END || tickConsumer == null) return;
-        List<PlayerSnapshot> out = new ArrayList<>();
-        for (ServerPlayer p : server.getPlayerList().getPlayers()) {
-            PlayerSnapshot s = new PlayerSnapshot();
-            s.uuid = p.getUUID().toString();
-            s.name = p.getGameProfile().getName();
-            s.x = p.getX();
-            s.y = p.getY();
-            s.z = p.getZ();
-            s.yaw = p.getYRot();
-            s.dimension = p.level().dimension().location().toString(); // registry key，绝不用世界文件夹名
-            out.add(s);
+        // §4.3 铁律：所有事件钩子外层 catch Throwable —— 本 mod 的任何异常绝不冒到总线打断服务端
+        try {
+            if (event.phase != TickEvent.Phase.END || tickConsumer == null) return;
+            List<PlayerSnapshot> out = new ArrayList<>();
+            for (ServerPlayer p : server.getPlayerList().getPlayers()) {
+                PlayerSnapshot s = new PlayerSnapshot();
+                s.uuid = p.getUUID().toString();
+                s.name = p.getGameProfile().getName();
+                s.x = p.getX();
+                s.y = p.getY();
+                s.z = p.getZ();
+                s.yaw = p.getYRot();
+                s.dimension = p.level().dimension().location().toString(); // registry key，绝不用世界文件夹名
+                out.add(s);
+            }
+            tickConsumer.accept(out);
+        } catch (Throwable t) {
+            LOG.log(java.util.logging.Level.FINE, "玩家采样失败", t);
         }
-        tickConsumer.accept(out);
     }
 
     @SubscribeEvent
     public void onChunkLoad(ChunkEvent.Load event) {
-        markDirtyFromLevel(event.getLevel(), event.getChunk().getPos().x, event.getChunk().getPos().z);
+        try {
+            markDirtyFromLevel(event.getLevel(), event.getChunk().getPos().x, event.getChunk().getPos().z);
+        } catch (Throwable t) {
+            LOG.log(java.util.logging.Level.FINE, "区块加载钩子失败", t);
+        }
     }
 
     @SubscribeEvent
     public void onBlockBreak(BlockEvent.BreakEvent event) {
-        markDirtyFromLevel(event.getLevel(),
-                event.getPos().getX() >> 4, event.getPos().getZ() >> 4);
+        try {
+            markDirtyFromLevel(event.getLevel(),
+                    event.getPos().getX() >> 4, event.getPos().getZ() >> 4);
+        } catch (Throwable t) {
+            LOG.log(java.util.logging.Level.FINE, "方块破坏钩子失败", t);
+        }
     }
 
     @SubscribeEvent
     public void onEntityPlace(BlockEvent.EntityPlaceEvent event) {
-        markDirtyFromLevel(event.getLevel(),
-                event.getPos().getX() >> 4, event.getPos().getZ() >> 4);
+        try {
+            markDirtyFromLevel(event.getLevel(),
+                    event.getPos().getX() >> 4, event.getPos().getZ() >> 4);
+        } catch (Throwable t) {
+            LOG.log(java.util.logging.Level.FINE, "方块放置钩子失败", t);
+        }
     }
 
     /** 事件基类拿到的是 LevelAccessor；只有 ServerLevel 才发脏区块 */
