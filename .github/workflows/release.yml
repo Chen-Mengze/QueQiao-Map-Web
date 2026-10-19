@@ -1,0 +1,49 @@
+name: Release
+
+# 发布随版本目录走：forge/versions/ 下每个 MC 版本目录都自动构建，
+# 全部产物挂到同一个 GitHub Release。后续加载器分支（fabric/neoforge）
+# 接入编译后，按同样结构加一个 job 即可。
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  forge:
+    name: Build Forge (every MC version)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Build every MC version under forge/versions
+        run: |
+          chmod +x gradlew
+          set -euo pipefail
+          for dir in forge/versions/*/; do
+            mc="$(basename "$dir")"
+            echo "::group::Forge ${mc}"
+            ./gradlew :common:build :forge:build -PmcTarget="${mc}" --no-daemon
+            echo "::endgroup::"
+          done
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: QueQiao Map Web ${{ github.ref_name }}
+          files: forge/build/libs/*.jar
+          fail_on_missing_files: true
+          generate_release_notes: true
