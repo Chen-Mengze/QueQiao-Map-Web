@@ -1,0 +1,242 @@
+name: CI
+
+# =============================================================================
+# 主分支 / PR 门禁（M6 整备项，见 AGENT.md §7）
+# 每个守卫步骤标注对应 AGENT.md 铁律编号；纯 shell，不依赖 gradle。
+# =============================================================================
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# 同一分支/PR 的旧任务自动取消，省 runner 额度
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # 1) 构建 + 测试（CONTRIBUTING.md §2.1「构建绿」+ §2.2 javac 自检的 CI 化）
+  #    :forge:build 顺带验证 :common 类已编进 mod jar（forge/build.gradle 的
+  #    from project(':common').sourceSets.main.output）
+  # ---------------------------------------------------------------------------
+  build-and-test:
+    name: Build & Test (Forge)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle（依赖与 wrapper 缓存）
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: "构建 forge jar + 跑 common 测试（CONTRIBUTING §2.1）"
+        run: |
+          chmod +x gradlew
+          set -euo pipefail
+          ./gradlew :common:test :forge:build --no-daemon
+
+      - name: 保留 forge 产物 jar（供 smoke job 冒烟）
+        uses: actions/upload-artifact@v4
+        with:
+          name: forge-jars-run${{ github.run_number }}
+          path: forge/build/libs/*.jar
+          if-no-files-found: error
+
+      - name: 测试失败也保留 common 测试报告（if: always()）
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: common-test-reports-run${{ github.run_number }}
+          path: common/build/reports/tests
+          if-no-files-found: ignore
+
+  # ---------------------------------------------------------------------------
+  # 2) 架构守卫：纯 shell，逐项失败即红并打印原因
+  # ---------------------------------------------------------------------------
+  arch-guards:
+    name: Arch guards (AGENT.md 铁律)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: "(a) common 零 net.minecraft import（AGENT.md §2 结构铁律/§8；CONTRIBUTING §2.2）"
+        run: |
+          set -euo pipefail
+          if hits="$(grep -rn --include='*.java' 'import net\.minecraft' common/src/main)"; then
+            echo "::error::common/src/main 出现 net.minecraft import：common 必须与 MC 解耦（多加载器前提）"
+            printf '%s\n' "$hits"
+            exit 1
+          fi
+          echo "OK：common/src/main 无 net.minecraft import"
+
+      - name: "(b) GlobalContext 仅限 sender/QueQiaoSink.java（AGENT.md §4 铁律4）"
+        run: |
+          set -euo pipefail
+          ALLOW="common/src/main/java/net/yumezawa/queqiao_map_web/sender/QueQiaoSink.java"
+          # 口径（lead 校正）：真引用 = 全仓库任何位置的 import …GlobalContext; 或 src/main 里的
+          # GlobalContext. 调用；注释/Javadoc（行首 //、*、/*）不算违规；测试代码里
+          # 字符串/注释的提及不算（测试真 import 它编译都过不了，import 才是真引用）
+          hits="$( { find . -name '*.java' -not -path './.git/*' -print0 \
+              | xargs -r -0 grep -HnE 'import [^;]*[.]GlobalContext;' ; \
+            find . -name '*.java' -not -path './.git/*' -path '*/src/main/*' -print0 \
+              | xargs -r -0 grep -HnE 'GlobalContext[.(]' ; } \
+            | grep -v -E '^[^:]+:[0-9]+:[[:space:]]*(//|\*|/\*)' || true)"
+          bad=0
+          while IFS= read -r line; do
+            [ -z "$line" ] && continue
+            file="${line%%:*}"
+            file="${file#./}"
+            if [ "$file" != "$ALLOW" ]; then
+              echo "违规（GlobalContext 出现在 QueQiaoSink 之外）：$line"
+              bad=1
+            fi
+          done <<< "$hits"
+          if [ "$bad" -ne 0 ]; then
+            echo "::error::GlobalContext 只允许出现在 $ALLOW（§4 铁律4：鹊桥是唯一通道，出口必须唯一）"
+            exit 1
+          fi
+          echo "OK：GlobalContext 代码引用仅限 $ALLOW"
+
+      - name: "(c) 全工程禁 @Mixin（AGENT.md §4 铁律5：不用 Mixin、不 fork 游戏）"
+        run: |
+          set -euo pipefail
+          # 排除注释行（行首 //、*、/*）：中文注释里提到 @Mixin 不算违规
+          hits="$(grep -rn --include='*.java' '@Mixin' . \
+            | grep -v -E ':[0-9]+:[[:space:]]*(//|\*|/\*)' || true)"
+          if [ -n "$hits" ]; then
+            echo "::error::发现 @Mixin 注解使用：全工程禁 Mixin（§4 铁律5）"
+            printf '%s\n' "$hits"
+            exit 1
+          fi
+          echo "OK：全工程无 @Mixin 注解（注释除外）"
+
+      - name: "(d) *.gradle 禁 filesMatching/expand(/eachFile（AGENT.md §3 资源过滤只用 ReplaceTokens）"
+        run: |
+          set -euo pipefail
+          # 跳过注释行（行首 //、*、/*）：forge/build.gradle 里「勿改回」的提醒注释合法存在
+          hits="$(grep -rn --include='*.gradle' -E 'filesMatching|expand\(|eachFile' . \
+            | grep -v -E ':[0-9]+:[[:space:]]*(//|\*|/\*)' || true)"
+          if [ -n "$hits" ]; then
+            echo "::error::gradle 脚本使用被禁的资源过滤 DSL（产生 MatchingCopyAction，IDEA 资源模型告警；只用 ReplaceTokens @token@）"
+            printf '%s\n' "$hits"
+            exit 1
+          fi
+          echo "OK：*.gradle 无 filesMatching/expand(/eachFile（注释除外）"
+
+      - name: "(e) gradle.properties 值禁非 ASCII（AGENT.md §3：Properties 按 ISO-8859-1 读取，中文必须 \\uXXXX 转义）"
+        run: |
+          set -euo pipefail
+          bad=0
+          while IFS= read -r f; do
+            # 只查键值行：铁律针对「注入模板的中文值」双重编码；# / ! 注释行跳过
+            if lines="$(LC_ALL=C grep -nP '^[^#!]*\K[^\x00-\x7F]' "$f")"; then
+              echo "$f 的键值行含非 ASCII 字节："
+              printf '%s\n' "$lines"
+              bad=1
+            fi
+          done < <(find . -name 'gradle.properties' -not -path './.git/*')
+          if [ "$bad" -ne 0 ]; then
+            echo "::error::gradle.properties 非注释行含非 ASCII：中文必须 \\uXXXX 转义，否则注入 mods.toml 双重编码（§3）"
+            exit 1
+          fi
+          echo "OK：全部 gradle.properties 键值行纯 ASCII（中文均已 \\uXXXX 转义）"
+
+  # ---------------------------------------------------------------------------
+  # 3) REQ 规格 ↔ 测试双向映射：
+  #    specs/<area>/spec.md 定义「### REQ-XXX-NNN 」（锁定约定）
+  #    common/src/test 测试带 @Tag("REQ-XXX-NNN")
+  #    正向：测试引用未定义 REQ → 红；反向：定义 REQ（REQ-ART-* 除外）无测试 → 红
+  # ---------------------------------------------------------------------------
+  spec-coverage:
+    name: REQ spec <-> test coverage
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: "REQ 双向映射校验（specs/<area>/spec.md ↔ common/src/test @Tag）"
+        run: |
+          set -euo pipefail
+          if [ ! -d specs ]; then
+            echo "::error::specs/ 目录不存在：REQ 定义在 specs/<area>/spec.md（锁定约定），无法校验映射"
+            exit 1
+          fi
+          if [ ! -d common/src/test ]; then
+            echo "::error::common/src/test 目录不存在：测试 @Tag(\"REQ-XXX-NNN\") 是映射的另一半"
+            exit 1
+          fi
+          spec_files="$(find specs -name 'spec.md')"
+          if [ -z "$spec_files" ]; then
+            echo "::error::specs/ 下没有任何 spec.md（约定路径 specs/<area>/spec.md）"
+            exit 1
+          fi
+          # 格式校验：任何以 # 开头并含 REQ- 的 spec 行必须严格为「### REQ-(AREA)-NNN + 空格」
+          malformed="$(find specs -name 'spec.md' -print0 \
+            | xargs -r -0 grep -hE '^#{1,6}[[:space:]]*REQ-' \
+            | grep -vE '^### REQ-(LIFE|CFG|SAMP|TILE|PAL|SEND|PROTO|ART)-[0-9]{3}( |$)' || true)"
+          if [ -n "$malformed" ]; then
+            echo "::error::REQ 定义标题不符合约定「### REQ-XXX-NNN 」（AREA ∈ LIFE|CFG|SAMP|TILE|PAL|SEND|PROTO|ART，NNN=三位数字）："
+            printf '%s\n' "$malformed"
+            exit 1
+          fi
+          defined="$(find specs -name 'spec.md' -print0 \
+            | xargs -r -0 grep -h '^### REQ-' \
+            | grep -oE 'REQ-[A-Z]+-[0-9]{3}' | sort -u || true)"
+          used="$(grep -rhoE '@Tag\("REQ-[A-Z]+-[0-9]{3}"\)' common/src/test --include='*.java' \
+            | grep -oE 'REQ-[A-Z]+-[0-9]{3}' | sort -u || true)"
+          # 正向：测试用了未定义的 REQ
+          orphan_tests="$(comm -23 <(printf '%s\n' "$used" | sed '/^$/d') \
+                              <(printf '%s\n' "$defined" | sed '/^$/d'))"
+          # 反向：specs 定义的 REQ（REQ-ART-* 文档类除外）没有任何测试引用
+          untested="$(comm -13 <(printf '%s\n' "$used" | sed '/^$/d') \
+                           <(printf '%s\n' "$defined" | sed '/^$/d' | grep -v '^REQ-ART-' || true))"
+          fail=0
+          if [ -n "$orphan_tests" ]; then
+            echo "::error::测试引用了 specs 未定义的 REQ（先补规格或改 Tag）："
+            printf '%s\n' "$orphan_tests"; fail=1
+          fi
+          if [ -n "$untested" ]; then
+            echo "::error::specs 定义的 REQ 无测试引用（REQ-ART-* 除外；补测试或归档规格）："
+            printf '%s\n' "$untested"; fail=1
+          fi
+          [ "$fail" -eq 0 ] || exit 1
+          echo "OK：REQ 映射闭合（定义 $(printf '%s\n' "$defined" | sed '/^$/d' | wc -l) 条 / 测试引用 $(printf '%s\n' "$used" | sed '/^$/d' | wc -l) 条）"
+
+  # ---------------------------------------------------------------------------
+  # 4) jar 冒烟：对 build-and-test 产物逐个跑 .github/scripts/smoke-jar.sh
+  #    断言清单见脚本头部注释（AGENT.md §2/§3）
+  # ---------------------------------------------------------------------------
+  smoke:
+    name: Forge jar smoke
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 下载 forge 产物 jar
+        uses: actions/download-artifact@v4
+        with:
+          name: forge-jars-run${{ github.run_number }}
+          path: forge-jars
+
+      - name: "逐 jar 冒烟（命名/元数据渲染/类合入/不 shade 鹊桥/MANIFEST）"
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          jars=(forge-jars/*.jar)
+          if [ "${#jars[@]}" -eq 0 ]; then
+            echo "::error::forge-jars 产物中没有 jar"
+            exit 1
+          fi
+          for jar in "${jars[@]}"; do
+            bash .github/scripts/smoke-jar.sh "$jar"
+          done
