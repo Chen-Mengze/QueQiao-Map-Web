@@ -117,4 +117,53 @@ class MapExtConfigTest {
         assertEquals(16, c.pendingCap);
         assertEquals(1000L, c.dimensionCheckIntervalMs);
     }
+
+    @Test
+    @Tag("REQ-CFG-004")
+    @DisplayName("地图库五新键：默认值、DEFAULT_YML 含五键、显式解析生效")
+    void newMapStoreKeysParsed() throws IOException {
+        MapExtConfig def = MapExtConfig.load(file());
+        assertTrue(def.backfillEnabled, "backfill_enabled 默认 true（仍受总开关门控）");
+        assertEquals(512, def.backfillMaxChunksPerSec);
+        assertTrue(def.regionStreamEnabled);
+        assertEquals(65536, def.regionStreamBytesPerSec);
+        assertEquals(4, def.regionStreamMaxRegionsPerEvent);
+        String yml = Files.readString(file(), StandardCharsets.UTF_8);
+        for (String key : new String[]{"backfill_enabled", "backfill_max_chunks_per_sec",
+                "region_stream_enabled", "region_stream_bytes_per_sec", "region_stream_max_regions_per_event"}) {
+            assertTrue(yml.contains(key + ":"), "DEFAULT_YML 必须含键 " + key);
+        }
+        MapExtConfig c = writeAndLoad(
+                "backfill_enabled: false",
+                "backfill_max_chunks_per_sec: 64",
+                "region_stream_enabled: false",
+                "region_stream_bytes_per_sec: 8192",
+                "region_stream_max_regions_per_event: 2"
+        );
+        assertFalse(c.backfillEnabled);
+        assertEquals(64, c.backfillMaxChunksPerSec);
+        assertFalse(c.regionStreamEnabled);
+        assertEquals(8192, c.regionStreamBytesPerSec);
+        assertEquals(2, c.regionStreamMaxRegionsPerEvent);
+    }
+
+    @Test
+    @Tag("REQ-CFG-004")
+    @DisplayName("新键越界钳制：≥16 / ≥4096 / 1..16；解析失败保持默认")
+    void newMapStoreKeysClamped() throws IOException {
+        MapExtConfig c = writeAndLoad(
+                "backfill_max_chunks_per_sec: 1",
+                "region_stream_bytes_per_sec: 0",
+                "region_stream_max_regions_per_event: 99"
+        );
+        assertEquals(16, c.backfillMaxChunksPerSec);
+        assertEquals(4096, c.regionStreamBytesPerSec);
+        assertEquals(16, c.regionStreamMaxRegionsPerEvent);
+        MapExtConfig d = writeAndLoad(
+                "region_stream_bytes_per_sec: abc",
+                "region_stream_max_regions_per_event: -5"
+        );
+        assertEquals(65536, d.regionStreamBytesPerSec, "解析失败 → 保持默认");
+        assertEquals(1, d.regionStreamMaxRegionsPerEvent, "-5 → 钳制下限 1");
+    }
 }

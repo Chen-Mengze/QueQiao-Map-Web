@@ -41,3 +41,13 @@
 - 给定需要改某字段语义，那么必须开新 REQ + 新 sub_type（或新 format），旧 REQ 标记废弃，不得原地改语义。
 
 **验证**：`ProtocolBaselineTest#jsonFieldSetOnlyGrows`（Gson 输出字段集基线快照比对，基线文件与 specs 同评审）
+
+### REQ-PROTO-005 新 sub_type map_region：地图库补传区域快照（新 DTO 字段名）
+
+**SHALL**：`MapRegionEvent` 构造实参 `super("MapRegionEvent", "notice", "map_region")`；字段：`dimension`（registry key，与 map_tile 同源）+ `regions`（至多 `region_stream_max_regions_per_event` 个）。`RegionPayloadModel` Gson 反射直出，JSON 字段名恰为 `rx` / `rz` / `format` / `xor` / `sha1` / `b64`（单词 camelCase）：rx/rz 为 Minecraft 区域坐标（覆盖区块 [rx*32,(rx+1)*32) × [rz*32,(rz+1)*32)）；`format` 复用 `zlib-pal8` token（像素 payload = pal8 512×512 行主序 → zlib，调色板语义与 map_tile 完全一致）；`xor` = MapStore 区域头对原始 RGB24 的 u32 XOR 校验（docs/DESIGN_MAPSTORE.md §2.5）；`sha1` = b64 内压缩字节的 hex（传输完整性可独立核验）；`b64` = 压缩字节本体。顺序铁律同样适用：map_palette 必须先于任何 map_region。本 sub_type 为新增，不改动任何既有字段（REQ-PROTO-004 义务不变）。
+
+**场景**：
+- 给定 Gson 序列化 MapRegionEvent 的键集，那么 = BaseEvent 基字段 + dimension、regions；regions 元素的键集恰为 rx/rz/format/xor/sha1/b64。
+- 给定消费端按 sub_type 字典分发（docs/INTEGRATION.md §1），那么 map_region 是本轮唯一新增 sub_type，未知消费端按契约忽略。
+
+**验证**：`ProtocolBaselineTest#newRegionDtoFieldsRegistered`

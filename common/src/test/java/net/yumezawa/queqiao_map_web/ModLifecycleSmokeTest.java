@@ -217,4 +217,60 @@ class ModLifecycleSmokeTest {
 
         assertDoesNotThrow(() -> lifecycle.stop());
     }
+
+    @Test
+    @Order(6)
+    @Tag("REQ-LIFE-005")
+    @DisplayName("地图库引擎双门：worldSaveRoot=null→全 null；未就绪不启动；就绪后各起一次（幂等门）；双开关全关→store 不建")
+    void enginesGatedOnReadyAndFlags() throws Exception {
+        // ① worldSaveRoot=null（Fake 默认）：即使就绪，整链路 null（不建任何引擎线程）
+        writeConfig("enabled: true");
+        lifecycle.start(adapter, dir);
+        injectSink(false, true);
+        adapter.tickConsumer.accept(List.of());
+        assertNull(lifecycle.mapStore(), "worldSaveRoot=null → 不创建 MapStore");
+        assertNull(lifecycle.backfillEngine());
+        assertNull(lifecycle.regionStreamer());
+        injectSink(true, true);
+        adapter.tickConsumer.accept(List.of());
+        assertNull(lifecycle.backfillEngine(), "无 store → 就绪也不建引擎");
+        assertNull(lifecycle.regionStreamer());
+        assertDoesNotThrow(() -> lifecycle.stop());
+
+        // ② 有 root：未就绪→不启动；就绪→各起一次（一次性门；再 tick 不换实例）
+        adapter = new FakePlatformAdapter();
+        adapter.solidChunk(0x3f76e4);
+        adapter.worldSaveRootDir = dir;
+        lifecycle.start(adapter, dir);
+        assertNotNull(lifecycle.mapStore(), "root 非 null 且开关默认 true → store 已建");
+        injectSink(false, true);
+        adapter.tickConsumer.accept(List.of());
+        assertNull(lifecycle.backfillEngine(), "未就绪 → 引擎不启动（就绪门）");
+        assertNull(lifecycle.regionStreamer());
+        injectSink(true, true);
+        adapter.tickConsumer.accept(List.of());
+        var backfill = lifecycle.backfillEngine();
+        var streamer = lifecycle.regionStreamer();
+        assertNotNull(backfill, "backfill_enabled 默认 true → 已启动");
+        assertNotNull(streamer, "region_stream_enabled 默认 true → 已启动");
+        adapter.tickConsumer.accept(List.of());
+        assertSame(backfill, lifecycle.backfillEngine(), "各启动一次（一次性门）");
+        assertSame(streamer, lifecycle.regionStreamer());
+        assertDoesNotThrow(() -> lifecycle.stop());
+        assertFalse(backfill.isRunning(), "stop 返回后回填线程已退出");
+        assertFalse(streamer.isRunning(), "stop 返回后区域流线程已退出");
+
+        // ③ 双开关全关：有 root 也不建 store
+        adapter = new FakePlatformAdapter();
+        adapter.solidChunk(0x3f76e4);
+        adapter.worldSaveRootDir = dir;
+        writeConfig("enabled: true", "backfill_enabled: false", "region_stream_enabled: false");
+        lifecycle.start(adapter, dir);
+        assertNull(lifecycle.mapStore(), "两个 enabled 均 false → 不建 store（enabled 门）");
+        injectSink(true, true);
+        adapter.tickConsumer.accept(List.of());
+        assertNull(lifecycle.backfillEngine());
+        assertNull(lifecycle.regionStreamer());
+        assertDoesNotThrow(() -> lifecycle.stop());
+    }
 }

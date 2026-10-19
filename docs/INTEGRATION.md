@@ -7,12 +7,12 @@
 ## 0. 定位：开放的数据结构与 API
 
 本 mod 是**鹊桥（QueQiao）的附属扩展**：鹊桥是唯一通道，不存在 WebSocket 直连或其他降级路径。
-服务端把数据封装成 4 个继承鹊桥 `BaseEvent` 的事件，经 `GlobalContext.sendEvent` 进入鹊桥消息流；
+服务端把数据封装成 5 个继承鹊桥 `BaseEvent` 的事件，经 `GlobalContext.sendEvent` 进入鹊桥消息流；
 消费端在鹊桥的消息接收侧按 `sub_type` 旁路收取即可，**不需要本 mod 的任何代码**。
 
 开放面有三层，全部稳定：
 
-1. **JSON 协议**（首选消费方式）：4 个 `sub_type` 的消息 JSON，字段语义见 §2–§4。
+1. **JSON 协议**（首选消费方式）：5 个 `sub_type` 的消息 JSON，字段语义见 §2–§4。
 2. **Java DTO**（可选，给基于鹊桥的 Java 消费端）：`common` 模块的 `event/` 与 `model/` 包即数据结构本体，
    可 `compileOnly` 引用 `common` 产物与坐标 `com.github.theword.queqiao:queqiao-tool:0.6.8`（GitHub Packages，见 [ARCHITECTURE.md §7](../ARCHITECTURE.md)）直接在进程内 `instanceof` 收取（绝不 shade）。
 3. **本文档 + ARCHITECTURE.md §4**：协议契约的唯一出处，改动走版本号（见 §7）。
@@ -27,6 +27,7 @@
 | `map_palette` | MapPaletteEvent | id, colors[] |
 | `player_move` | PlayerMoveEvent | players[] |
 | `map_tile` | MapTileEvent | dimension, tiles[] |
+| `map_region` | MapRegionEvent | dimension, regions[]（二维区域全量/续传，见 §3.5） |
 
 - `server_name / server_version / server_type / timestamp` 由鹊桥在发送路径自动填充；消费端可用来区分多台服务器。
 - 事件名（`PlayerMoveEvent` 等）与 postType（`notice`）也在信封里，但键名以鹊桥实际输出为准——**不要依赖它们路由**，只认 `sub_type`。
@@ -37,8 +38,8 @@
 ```
 鹊桥 init 完成 + 服务端启动  →  mod 才开始发送（此前完全静默，零流量）
   1. map_dimensions   连接建立后一次；之后清单变化时重发（5s 巡检）
-  2. map_palette      任何 map_tile 之前必达；每连接一次；发出后即冻结
-  3. player_move / map_tile   持续批量流（节流参数见 §6）
+  2. map_palette      任何 map_tile / map_region 之前必达；每连接一次；发出后即冻结
+  3. player_move / map_tile / map_region   持续批量流（map_region 为区域全量/续传流，节流见 §6）
 ```
 
 消费端建议：收到 `map_palette` 之前缓存的 `map_tile` 要么丢弃、要么挂起等调色板；按 `(dimension, paletteId)` 做瓦片缓存键。
@@ -107,7 +108,31 @@
 }
 ```
 
-字段语义见 §4。
+### 3.5 map_region — 二维区域（全量/续传）
+
+```json
+{
+  "sub_type": "map_region",
+  "dimension": "minecraft:overworld",
+  "regions": [
+    {
+      "rx": 0, "rz": -1,
+      "format": "zlib-pal8",
+      "xor": 1234567890,
+      "sha1": "e3b0c4…", "b64": "eJxjYmBgYmJg…"
+    }
+  ]
+}
+```
+
+- `rx / rz`：**MC 区域坐标**（整数，可为负），与存档文件 `r.<rx>.<rz>.mca` 同款坐标——每区域覆盖区块 `[rx*32,(rx+1)*32) × [rz*32,(rz+1)*32)`，即 **32×32 区块 = 512×512 像素**（1 像素 = 1 方块列）。
+- 解码与 §4 的 `zlib-pal8` 完全一致，仅 `side` 固定为 **512**：`b64` → inflate → 512×512 索引字节（行优先 `index = pz*512 + px`），字节 = `map_palette` 下标（0 = 未设置，渲染透明）。
+- `xor` 是**服务端库内容校验**（Xaero 式异或）：服务端本地地图库对该区域**未压缩 RGB24** 载荷按 4 字节大端组异或。服务端只在 `(server, dimension, rx, rz) + xor` 变化时重发该区域——这就是**断点续传**：重连时消费端已一致的区域不会再收到。注意与 `sha1` 分属两层：`sha1` = 压缩载荷字节的 hex 摘要（去重用），`xor` = 未压缩库内容的版本指纹（续传判定用）。
+- 区域到达语义 = **整块替换**该 512×512 范围（含区域内未生成区块的全 0 列）。
+- 与 `map_tile`（size 1/8 增量）**叠加幂等**：区域流 = 整块替换、tile = 局部覆盖，按位置键覆盖写即可，到达顺序无关。
+- 时序：`map_palette` 先于任何 `map_region` 必达（与 `map_tile` 同一条保证，见 §2）。
+- 消费端健壮性适用 §5 清单：未知 `format` 跳过并记日志、解析全程 `try/except` 兜底、未知字段忽略。
+- 预算：单区域压缩后典型 **15–60 KB**（512×512 pal8 raw 256 KB → zlib）；默认 **64 KB/s** 节流（见 §6），全量补发 2000 区域 ≈ **10–20 分钟**一次性，此后仅变化区域。
 
 ## 4. 瓦片解析：`zlib-pal8` 解码步骤
 
@@ -161,6 +186,8 @@ async function decodeTile(t, colors) {
 用途：内容寻址去重——同一 `(dimension, cx, cz, size)` 位置收到相同 sha1 直接跳过；
 服务端对脏区块重采后内容不变时，消费端也应靠它省掉重复绘制。
 
+区域级去重同构：`map_region` 的位置键是 `(server, dimension, rx, rz)`——先比 `xor`（服务端库对未压缩内容的 Xaero 式校验）：相等即服务端直接跳过、只有 xor 变化才重发（= 断点续传）；消费端收到后再按 `sha1`（压缩字节摘要）跳过重复解压与绘制。
+
 ## 5. 消费端健壮性清单
 
 1. 未知 `sub_type` / 未知字段：忽略。
@@ -185,6 +212,11 @@ max_chunk_renders_per_tick: 64
 pending_cap: 1024
 palette_id: vanilla-1.20.1-a
 dimension_check_interval_ms: 5000
+backfill_enabled: true                   # mca→本地地图库 回填开关
+backfill_max_chunks_per_sec: 512         # 回填节流（按 chunk 计，钳制 ≥16）
+region_stream_enabled: true              # map_region 区域流开关
+region_stream_bytes_per_sec: 65536       # 区域流节流（按压缩字节计，钳制 ≥4096）
+region_stream_max_regions_per_event: 4   # 单事件最多区域数（钳制 ≥1 ≤16）
 ```
 
 量级参考：8×8 区域瓦片（128×128 索引）zlib 后典型 0.5–2 KB；合并摊薄后 ≈20 B/区块。

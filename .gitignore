@@ -27,3 +27,9 @@ Thumbs.db
 /common/plugins/
 
 # libs/ 是 compileOnly 依赖，必须入库，不要忽略
+
+# DSH 工具操作锁残留
+.dsh-ops-*.lock
+
+# 本地测试运行落地的服务端目录（根级）
+/plugins/

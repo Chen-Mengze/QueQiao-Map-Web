@@ -39,6 +39,16 @@ public final class MapExtConfig {
     public String paletteId = "vanilla-1.20.1-a";
     /** 维度列表变化检测间隔 */
     public long dimensionCheckIntervalMs = 5000;
+    /** 地图库回填引擎开关（REQ-CFG-004） */
+    public boolean backfillEnabled = true;
+    /** 回填每秒区块数上限（钳制 ≥16） */
+    public int backfillMaxChunksPerSec = 512;
+    /** 区域流引擎开关（REQ-CFG-004） */
+    public boolean regionStreamEnabled = true;
+    /** 区域流每秒压缩字节令牌桶（钳制 ≥4096） */
+    public int regionStreamBytesPerSec = 65536;
+    /** 单个 map_region 事件区域数上限（钳制 1..16） */
+    public int regionStreamMaxRegionsPerEvent = 4;
 
     private static final Logger LOG = Logger.getLogger("queqiao_map_web.config");
 
@@ -90,6 +100,11 @@ public final class MapExtConfig {
                 case "pending_cap" -> pendingCap = Math.max(16, Integer.parseInt(val));
                 case "palette_id" -> paletteId = val;
                 case "dimension_check_interval_ms" -> dimensionCheckIntervalMs = Math.max(1000, Long.parseLong(val));
+                case "backfill_enabled" -> backfillEnabled = Boolean.parseBoolean(val);
+                case "backfill_max_chunks_per_sec" -> backfillMaxChunksPerSec = Math.max(16, Integer.parseInt(val));
+                case "region_stream_enabled" -> regionStreamEnabled = Boolean.parseBoolean(val);
+                case "region_stream_bytes_per_sec" -> regionStreamBytesPerSec = Math.max(4096, Integer.parseInt(val));
+                case "region_stream_max_regions_per_event" -> regionStreamMaxRegionsPerEvent = Math.min(16, Math.max(1, Integer.parseInt(val)));
                 default -> {
                 }
             }
@@ -111,5 +126,12 @@ public final class MapExtConfig {
             pending_cap: 1024
             palette_id: vanilla-1.20.1-a
             dimension_check_interval_ms: 5000
+            # 地图库：回填引擎（首次全量扫描 region 文件建本地库）
+            backfill_enabled: true
+            backfill_max_chunks_per_sec: 512
+            # 地图库：区域流（变化区域经 map_region 事件补传）
+            region_stream_enabled: true
+            region_stream_bytes_per_sec: 65536
+            region_stream_max_regions_per_event: 4
             """;
 }

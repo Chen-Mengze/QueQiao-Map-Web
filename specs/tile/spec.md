@@ -50,3 +50,13 @@
 - 给定 drain 被调用且通道可用，那么循环分批直至队列清空，不因每-tick-上限中途退出。
 
 **验证**：`TileQueueTest#renderCappedPerTick`、`TileQueueDrainTest#drainExemptFromTickCap`
+
+### REQ-TILE-006 flush 写穿本地地图库 + publishPalette 门对外暴露
+
+**SHALL**：TileQueue 构造器带可空 `MapStore`（第 5 参）。`flush()` 在 pack 量化完成后对批内每个区块写穿 `store.putChunk(dim,cx,cz,rgb24)`——与发送成败**无关**（写穿先于调色板/瓦片发送），执行线程与 flush 一致（后台 runAsync 线程；停服 drain 时为主线程），逐块吞异常（FINE）；store=null 整体跳过写穿，无 NPE。「首次刷写发调色板+冻结」段抽为 `public boolean publishPalette(EventSink)`（已发过 → 幂等 true；发送失败 → false 且不置位）与 `public boolean palettePublished()`，供 RegionStreamer 复用顺序铁律门；flush 内部调用 publishPalette，对 REQ-TILE-001 的既有语义（palette 先于 tile、失败整批退回）不变。
+
+**场景**：
+- 给定 store 非 null 且 sink.send 恒 false，那么 flush 后该块像素已在 store 区域文件中（写穿独立于发送），批次仍按 REQ-TILE-003 退回。
+- 给定 palettePublished()=true，再调 publishPalette(另一个 sink)，那么返回 true 且不再发 MapPaletteEvent。
+
+**验证**：`TileQueueTest#writeThroughStoreIndependentOfSendAndPaletteGate`

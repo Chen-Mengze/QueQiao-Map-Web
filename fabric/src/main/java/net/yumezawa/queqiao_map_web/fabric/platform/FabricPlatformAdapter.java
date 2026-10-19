@@ -14,8 +14,10 @@ import net.minecraft.util.math.BlockPos;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.chunk.LevelChunk;
 import net.minecraft.world.level.levelgen.Heightmap;
+import net.minecraft.world.level.storage.LevelResource;
 import net.yumezawa.queqiao_map_web.platform.PlatformAdapter;
 
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
@@ -106,6 +108,16 @@ public final class FabricPlatformAdapter implements PlatformAdapter {
     @Override
     public String platformName() {
         return "fabric";
+    }
+
+    /**
+     * 世界存档根目录（world/ 本体）。yarn 1.20.1 与 mojmap 同名同包：
+     * MinecraftServer#getWorldPath(LevelResource) -> java.nio.file.Path（intermediary method_46071）。
+     * 注：yarn 映射不接本仓编译，javap/映射复核待做（AGENT §6）。
+     */
+    @Override
+    public Path worldSaveRoot() {
+        return server.getWorldPath(LevelResource.ROOT);
     }
 
     private void onEndTick(MinecraftServer server) {

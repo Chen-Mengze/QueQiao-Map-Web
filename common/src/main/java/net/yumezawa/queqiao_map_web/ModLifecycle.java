@@ -3,6 +3,9 @@ package net.yumezawa.queqiao_map_web;
 import net.yumezawa.queqiao_map_web.config.MapExtConfig;
 import net.yumezawa.queqiao_map_web.event.MapDimensionsEvent;
 import net.yumezawa.queqiao_map_web.event.PlayerMoveEvent;
+import net.yumezawa.queqiao_map_web.mapstore.BackfillEngine;
+import net.yumezawa.queqiao_map_web.mapstore.MapStore;
+import net.yumezawa.queqiao_map_web.mapstore.RegionStreamer;
 import net.yumezawa.queqiao_map_web.platform.PlatformAdapter;
 import net.yumezawa.queqiao_map_web.tile.Palette;
 import net.yumezawa.queqiao_map_web.sampler.PositionSampler;
@@ -40,6 +43,11 @@ public final class ModLifecycle {
     private PositionSampler positionSampler;
     private TileQueue tileQueue;
     private Palette palette;
+    /** 本地地图库（REQ-LIFE-005）：null = worldSaveRoot 不可得或双开关均关 */
+    private MapStore mapStore;
+    private BackfillEngine backfillEngine;
+    private RegionStreamer regionStreamer;
+    private boolean enginesStarted;
     private final AtomicReference<EventSink> sinkRef = new AtomicReference<>();
 
     private boolean running;
@@ -68,7 +76,19 @@ public final class ModLifecycle {
 
         this.palette = new Palette();
         this.positionSampler = new PositionSampler(config);
-        this.tileQueue = new TileQueue(adapter, config, palette, sinkRef::get);
+        // 地图库（REQ-LIFE-005）：平台给出世界存档根且任一引擎开关开启才建；否则整链路为 null
+        Path worldRoot = null;
+        try {
+            worldRoot = adapter.worldSaveRoot();
+        } catch (Throwable t) {
+            LOG.log(Level.FINE, "worldSaveRoot 获取失败（地图库关闭）", t);
+        }
+        this.mapStore = (worldRoot != null && (config.backfillEnabled || config.regionStreamEnabled))
+                ? new MapStore(worldRoot) : null;
+        this.backfillEngine = null;
+        this.regionStreamer = null;
+        this.enginesStarted = false;
+        this.tileQueue = new TileQueue(adapter, config, palette, sinkRef::get, mapStore);
         sinkRef.set(new QueQiaoSink());
 
         adapter.onTick(this::onServerTick);
@@ -92,6 +112,25 @@ public final class ModLifecycle {
     public synchronized void stop() {
         if (!running) return;
         running = false;
+        // 停服顺序（REQ-LIFE-005/REQ-MS-008）：先停区域流（保证 map_region 不再晚于 map_tile）、
+        // 再停回填、最后排空 tileQueue；adapter.shutdown 由加载器入口先于本方法调用
+        if (regionStreamer != null) {
+            try {
+                regionStreamer.stop();
+            } catch (Throwable t) {
+                LOG.log(Level.FINE, "停止区域流失败", t);
+            }
+            regionStreamer = null;
+        }
+        if (backfillEngine != null) {
+            try {
+                backfillEngine.stop();
+            } catch (Throwable t) {
+                LOG.log(Level.FINE, "停止回填引擎失败", t);
+            }
+            backfillEngine = null;
+        }
+        mapStore = null;
         try {
             tileQueue.drain();
         } catch (Throwable t) {
@@ -114,6 +153,8 @@ public final class ModLifecycle {
                 bridgeReadyLogged = true;
                 LOG.info("[" + MOD_ID + "] 鹊桥已就绪，事件流开始。");
             }
+            // 首个就绪 tick：启动地图库引擎（各一次，各受自身开关约束，REQ-LIFE-005）
+            startMapStoreEngines();
 
             var players = positionSampler.sample(snapshots, now);
             if (!players.isEmpty()) sink.send(new PlayerMoveEvent(players));
@@ -126,11 +167,46 @@ public final class ModLifecycle {
                 if (!dims.equals(lastDimensions)) {
                     lastDimensions = dims;
                     sink.send(new MapDimensionsEvent(dims));
+                    // 维度清单变化：唤醒区域流立即复查新维度（不等 30s 周期）
+                    if (regionStreamer != null) regionStreamer.requestRecheck();
                 }
             }
         } catch (Throwable t) {
             LOG.log(Level.FINE, "tick 处理异常（已吞掉，不影响服务端）", t);
         }
+    }
+
+    /** 就绪门后启动回填与区域流（各一次；异常吞 FINE，不影响服务端 tick） */
+    private void startMapStoreEngines() {
+        if (enginesStarted || mapStore == null) return;
+        enginesStarted = true;
+        try {
+            if (config.backfillEnabled) {
+                backfillEngine = new BackfillEngine(mapStore, adapter.worldSaveRoot(), config.backfillMaxChunksPerSec);
+                backfillEngine.start();
+            }
+            if (config.regionStreamEnabled) {
+                regionStreamer = new RegionStreamer(mapStore, tileQueue, palette, config, sinkRef::get);
+                regionStreamer.start();
+            }
+        } catch (Throwable t) {
+            backfillEngine = null;
+            regionStreamer = null;
+            LOG.log(Level.FINE, "地图库引擎启动失败（相关功能本次会话降级）", t);
+        }
+    }
+
+    /** 仅测试可见：地图库组件（null = 未创建；stop 后置 null） */
+    MapStore mapStore() {
+        return mapStore;
+    }
+
+    BackfillEngine backfillEngine() {
+        return backfillEngine;
+    }
+
+    RegionStreamer regionStreamer() {
+        return regionStreamer;
     }
 
     private String sinkName() {

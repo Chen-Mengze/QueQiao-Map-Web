@@ -30,3 +30,13 @@
 - 给定 `batch_size: 0`，当 load，那么钳制为 1。
 
 **验证**：`MapExtConfigTest#invalidValueFallsBackToDefault`
+
+### REQ-CFG-004 地图库新键（回填/区域流默认与钳制）
+
+**SHALL**：在 REQ-CFG-002 列举之外，识别键再增：`backfill_enabled`（默认 **true**）、`backfill_max_chunks_per_sec`（默认 **512**，钳制 ≥16）、`region_stream_enabled`（默认 **true**）、`region_stream_bytes_per_sec`（默认 **65536**，钳制 ≥4096）、`region_stream_max_regions_per_event`（默认 **4**，钳制 1..16）。缺文件写出的 DEFAULT_YML 模板必须包含这五个键（注释风格同既有键）；数值解析失败保持默认（REQ-CFG-003 语义同样适用）。注意：两个 enabled 键默认虽为 true，仍受总开关 `enabled`（REQ-CFG-001 / REQ-LIFE-001）门控——总开关不开一切为零。
+
+**场景**：
+- 给定 `backfill_max_chunks_per_sec: 1`，那么钳制为 16；给定 `region_stream_max_regions_per_event: 99`，那么钳制为 16。
+- 给定 `region_stream_bytes_per_sec: abc`，那么保持默认 65536，无异常。
+
+**验证**：`MapExtConfigTest#newMapStoreKeysParsed`、`MapExtConfigTest#newMapStoreKeysClamped`

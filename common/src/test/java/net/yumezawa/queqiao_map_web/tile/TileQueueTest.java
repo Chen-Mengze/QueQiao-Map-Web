@@ -2,6 +2,7 @@ package net.yumezawa.queqiao_map_web.tile;
 
 import net.yumezawa.queqiao_map_web.config.MapExtConfig;
 import net.yumezawa.queqiao_map_web.event.MapTileEvent;
+import net.yumezawa.queqiao_map_web.mapstore.MapStore;
 import net.yumezawa.queqiao_map_web.model.TilePayloadModel;
 import net.yumezawa.queqiao_map_web.platform.PlatformAdapter.ChunkPos;
 import net.yumezawa.queqiao_map_web.sender.EventSink;
@@ -60,7 +61,7 @@ class TileQueueTest {
         okSink = new RecordingEventSink(true, true);
         sinkRef = new AtomicReference<>(okSink);
         palette = new Palette();
-        return new TileQueue(adapter, c, palette, sinkRef::get);
+        return new TileQueue(adapter, c, palette, sinkRef::get, null);
     }
 
     private static void enqueueChunks(TileQueue q, int... cxThenCz) {
@@ -214,5 +215,39 @@ class TileQueueTest {
         boolean anyColored = false;
         for (byte b : px) if (b != 0) { anyColored = true; break; }
         assertTrue(anyColored, "纯色块的像素应引用蓝色下标（>=1）而不是全 0");
+    }
+
+    @Test
+    @Tag("REQ-TILE-006")
+    @DisplayName("flush 写穿 store 先于发送（send 恒 false 也已落盘）；publishPalette/palettePublished 幂等门")
+    void writeThroughStoreIndependentOfSendAndPaletteGate() throws IOException {
+        MapExtConfig c = cfg("batch_size: 4");
+        MapStore store = new MapStore(dir); // store 根 = dir/queqiao_map_web/store
+        adapter = new FakePlatformAdapter();
+        adapter.solidChunk(0x3f76e4);
+        RecordingEventSink failing = new RecordingEventSink(true, false);
+        sinkRef = new AtomicReference<>(failing);
+        palette = new Palette();
+        TileQueue q = new TileQueue(adapter, c, palette, sinkRef::get, store);
+        assertFalse(q.palettePublished(), "初始未发布调色板");
+        enqueueChunks(q, 0, 0, 1, 0, 0, 1, 1, 1);
+        long now = System.currentTimeMillis() + 10_000;
+        assertDoesNotThrow(() -> q.onTick(now));
+        assertEquals(List.of("map_palette"), failing.subTypes(), "调色板发送失败即止，本轮无 map_tile");
+        assertFalse(q.palettePublished(), "发送失败 → paletteSent 不置位");
+        byte[] rgb = store.readRegion(DIM, 0, 0);
+        assertNotNull(rgb, "写穿独立于发送成败：区域文件已存在");
+        assertEquals(MapStore.PAYLOAD_BYTES, rgb.length);
+        assertEquals((byte) 0x3f, rgb[0], "块(0,0)首像素 R=0x3f（原样 RGB24，非量化）");
+        assertEquals((byte) 0x76, rgb[1]);
+        assertEquals((byte) 0xe4, rgb[2]);
+        okSink = new RecordingEventSink(true, true);
+        sinkRef.set(okSink); // 通道恢复
+        q.onTick(now);       // 退回批次重发
+        assertEquals(List.of("map_palette", "map_tile"), okSink.subTypes(), "退回后重发成功");
+        assertTrue(q.palettePublished());
+        RecordingEventSink second = new RecordingEventSink(true, true);
+        assertTrue(q.publishPalette(second), "已发布 → 幂等返回 true");
+        assertTrue(second.sent.isEmpty(), "重复 publishPalette 不再发 MapPaletteEvent");
     }
 }

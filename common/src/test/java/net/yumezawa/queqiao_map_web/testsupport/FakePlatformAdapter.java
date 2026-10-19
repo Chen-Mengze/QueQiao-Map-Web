@@ -2,6 +2,7 @@ package net.yumezawa.queqiao_map_web.testsupport;
 
 import net.yumezawa.queqiao_map_web.platform.PlatformAdapter;
 
+import java.nio.file.Path;
 import java.util.List;
 import java.util.function.Consumer;
 
@@ -26,6 +27,9 @@ public final class FakePlatformAdapter implements PlatformAdapter {
 
     /** listDimensions 的返回值（registry key 风格） */
     public List<String> dimensions = List.of("minecraft:overworld");
+
+    /** worldSaveRoot 的返回值（null = 平台不支持 → 地图库/回填/区域流关闭，REQ-LIFE-005） */
+    public Path worldSaveRootDir;
 
     private byte[] solidRgb24;
 
@@ -75,6 +79,11 @@ public final class FakePlatformAdapter implements PlatformAdapter {
     @Override
     public String platformName() {
         return "TEST";
+    }
+
+    @Override
+    public Path worldSaveRoot() {
+        return worldSaveRootDir;
     }
 
     /** 便捷造玩家快照 */

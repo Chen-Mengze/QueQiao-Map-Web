@@ -1,5 +1,6 @@
 package net.yumezawa.queqiao_map_web.platform;
 
+import java.nio.file.Path;
 import java.util.List;
 import java.util.function.Consumer;
 
@@ -61,6 +62,13 @@ public interface PlatformAdapter {
 
     /** 全部维度，registry key */
     List<String> listDimensions();
+
+    /**
+     * 世界存档根目录（world/ 本体，含 region/ 与 dimension/）；
+     * 返回 null = 平台未提供（地图库/回填/区域流整体关闭，REQ-LIFE-005）。
+     * 维度 → mca 目录换算由 common 的 MapStore 完成（DESIGN_MAPSTORE §2.6）。
+     */
+    Path worldSaveRoot();
 
     /** 后台线程执行（量化/压缩/发送等重活） */
     void runAsync(Runnable task);

@@ -13,7 +13,7 @@
 | NeoForge | 1.21.1 · 26.1                                                          | 1.21.1 起                                      |
 
 工作重心是 **模组端**。插件端（Paper/Spigot/Folia）生态已有现成方案，不在主链路内。
-本仓库只做服务端 mod 与协议侧：**开放数据结构与 API**（4 事件契约 + `docs/INTEGRATION.md`）
+本仓库只做服务端 mod 与协议侧：**开放数据结构与 API**（5 事件契约 + `docs/INTEGRATION.md`）
 供第三方消费端适配——含 owner 自有项目、AstrBot 插件与任何自研 Web 地图端。
 
 ## 1. 事实基础：不需要 Mixin，也不需要 fork
@@ -296,6 +296,29 @@ public interface PlatformAdapter {
 }
 ```
 
+### 4.5 MapRegionEvent（区域流：全量/续传）
+
+```json
+{
+  "event_name": "MapRegionEvent",
+  "post_type": "notice",
+  "sub_type": "map_region",
+  "dimension": "minecraft:overworld",
+  "regions": [
+    {
+      "rx": 0,
+      "rz": -1,
+      "format": "zlib-pal8",
+      "xor": 1234567890,
+      "sha1": "...",
+      "b64": "..."
+    }
+  ]
+}
+```
+
+`rx / rz` = MC 区域坐标（每区域覆盖区块 `[rx*32,(rx+1)*32) × [rz*32,(rz+1)*32)`，即 32×32 区块 = 512×512 像素，1 像素 = 1 方块列）。像素载荷 = 调色板量化后的 pal8 512×512 → zlib，复用 `zlib-pal8` token。`xor` = MapStore 对该区域**未压缩 RGB24** 载荷的 Xaero 式异或校验（变更检测与断点续传，见 §5.5）；`sha1` = 压缩载荷字节的 hex 摘要。区域载荷 = **整块替换**该范围，与 `map_tile` 增量叠加幂等；palette 必须先于任何 `map_region`（与 `map_tile` 同序铁律）。
+
 ---
 
 ## 5. 带宽：实测结论
@@ -327,10 +350,52 @@ public interface PlatformAdapter {
 | 1 人步行          |         5.4 | 0.5 kB/s | 0.1 kB/s |
 | 10 人分散         |          54 | 5.3 kB/s | 1.1 kB/s |
 | 50 人高速（鞘翅） |         938 |  92 kB/s |  19 kB/s |
+| 区域流 map_region（一次性全量回填） | — | — | 单区域 15–60 KB（zlib 后）@ 默认 64 KB/s |
+
+**map_region（区域流）**：单区域 512×512 pal8 raw 256 KB → 自然地形 zlib 后典型 **15–60 KB**；默认 **64 KB/s** 节流（`region_stream_bytes_per_sec: 65536`）——2000 区域一次性全量 ≈ **10–20 分钟**，此后仅 xor 变化区域（见 §5.5）。
 
 存储侧：8000×8000 格（100 万区块）约 89 MB，32000×32000 格约 1.4 GB。
 
 玩家位置是小头：约 200 B/条，节流后几十字节级。 **常态上行大概率在个位数 kB/s。**
+
+---
+## 5.5 地图库与区域流（mapstore / map_region）
+
+> 设计蓝图见 [docs/DESIGN_MAPSTORE.md](docs/DESIGN_MAPSTORE.md)（保留作设计记录）；落地语义以本节与 `specs/mapstore` 为准。
+> 新增包 `common/…/mapstore/` 纯 JDK、零 `net.minecraft.*`；主线程零新增开销（采样铁律不变，AGENT.md §4.5）。
+
+### 三流架构
+
+存档 mca（3D，32×32 区块/区域）经 mapstore 解码为 **512×512 px RGB24 俯视图**，先落**本地二维地图库 MapStore**（`.qms` 文件），再对外发送。数据共三条流：
+
+| 流 | 链路 | 语义 |
+|---|---|---|
+| 实时增量流（现有） | 脏区块 → 主线程采样 RGB24 → `TileQueue` 发 `map_tile` | 语义不动；新增**写穿 MapStore**（`putChunk`），store 保持最新、xor 随之演进 |
+| 回填流（新） | `BackfillEngine` 自有后台线程【只读】mca → 解码顶层方块 → RGB → `putRegion` 整区域入库 | 只补 store 缺失/更新的区域（mtime 比对）；不产 map_tile，避免与区域流重复；按 chunk 令牌桶节流 |
+| 区域流（新） | `RegionStreamer` 把 MapStore 内容按区域打包成 `map_region` 事件限速流式输出 | 鹊桥就绪且 palette 已发后启动；`xor32 == lastSentXor` 的区域跳过 → 重启/重连近零流量 |
+
+鹊桥没有反向请求通道，「用时发送」由 xor 续传近似：消费端已一致的区域，服务端直接跳过不发。
+
+### 本地地图库（MapStore，.qms 格式）
+
+位置：`<worldSaveRoot()>/queqiao_map_web/store/<dimFolder>/r.<rx>.<rz>.qms`——dimFolder 沿用 MC 维度目录约定（overworld 直名，其余 `ns_path`），但属**本 mod 自有目录，绝不写入存档 `region/`**。`worldSaveRoot()` 为 PlatformAdapter 新契约方法，返回 null = 不支持（store 关闭，仅实时流）。
+
+文件布局（统一大端）：
+
+```
+magic QMS1 | u16 side=512 | u8 formatVer=1 | u32 xor32 | u32 lastSentXor
+| u64 mtimeMillis | u32 payloadLen | zlib(RGB24 512×512×3=786432B 行优先)
+```
+
+- **xor32**：对 payload **原始字节**按 4 字节大端组做 XOR——Xaero 式异或校验，标识「库内容版本」；与 wire 侧 `sha1`（压缩字节摘要）分属两层，两个都要发。
+- **lastSentXor**：最近一次成功外发的区域 xor（发送成功后 `markSent` 更新）。`(server, dimension, rx, rz) + xor` 变化才重发 = **断点续传**；`mtimeMillis` 与 mca mtime 比对做回填增量判定。
+- 全 0 像素 = 未采样（palette 下标 0 = 透明），与 map_tile 既有约定一致。API 全部线程安全（维度目录 + 文件粒度锁）。
+
+### 消费端语义与预算
+
+- **全量**：连接后 mod 自动按区域流式补发全部已生成区域（`map_region`），无需消费端请求；新开服务器近乎空白，随运行从初始逐步扩展。
+- **幂等**：按 `(server, dimension, rx, rz) + xor/sha1` 去重；区域到达 = **整块替换**该 32×32 区块范围；`map_tile`（size 1/8）增量 = 局部覆盖——二者叠加幂等，到达顺序无关。
+- **预算**：单区域 512×512 pal8 raw 256 KB → 自然地形 zlib 后典型 **15–60 KB**；默认 **64 KB/s** 节流，2000 区域一次性全量 ≈ **10–20 分钟**，此后仅变化区域。消费端契约细节见 docs/INTEGRATION.md §3.5。
 
 ---
 
@@ -354,7 +419,7 @@ enabled: false        # 不开则一条新事件都不发
 
 **第 2 层 · 全新 sub_type 命名空间**
 
-`player_move` / `map_tile` / `map_palette` / `map_dimensions` 与既有取值零冲突，不复用、不改写任何既有事件。
+`player_move` / `map_tile` / `map_region` / `map_palette` / `map_dimensions` 与既有取值零冲突，不复用、不改写任何既有事件。
 
 **第 3 层 · 能力协商（规划项）**
 
@@ -423,4 +488,4 @@ async def handle_mc_message(self, raw):
 | tool 包版本/包名漂移        | 锁 jar 后反编译核对；探针未就绪则完全静默（零流量）      |
 | 渲染线程开销                | 后台线程池 + 每 tick 渲染区块数硬上限                    |
 | 老插件收到未知事件          | 见第 6 节三层保护                                        |
-| 读 region 与服务器写盘冲突  | **不读 region**；只在区块加载/改动事件时从内存取顶层方块 |
+| 读 region 与服务器写盘冲突  | 主线程绝不读盘（采样只从内存取）；回填仅 mapstore 自有后台线程**只读** mca、mtime 增量跳过、异常吞；绝不写 `region/`（store 自有目录，见 §5.5） |

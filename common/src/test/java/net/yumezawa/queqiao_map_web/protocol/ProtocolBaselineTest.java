@@ -5,9 +5,11 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import net.yumezawa.queqiao_map_web.event.MapDimensionsEvent;
 import net.yumezawa.queqiao_map_web.event.MapPaletteEvent;
+import net.yumezawa.queqiao_map_web.event.MapRegionEvent;
 import net.yumezawa.queqiao_map_web.event.MapTileEvent;
 import net.yumezawa.queqiao_map_web.event.PlayerMoveEvent;
 import net.yumezawa.queqiao_map_web.model.PlayerPosModel;
+import net.yumezawa.queqiao_map_web.model.RegionPayloadModel;
 import net.yumezawa.queqiao_map_web.model.TilePayloadModel;
 import net.yumezawa.queqiao_map_web.testsupport.QueqiaoToolBootstrap;
 import org.junit.jupiter.api.BeforeAll;
@@ -19,6 +21,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -55,6 +58,23 @@ class ProtocolBaselineTest {
                         new TilePayloadModel(0, 0, 1, "zlib-pal8", "0".repeat(40), "AA")))));
         assertBaseline(Set.of("dimensions"),
                 GSON.toJson(new MapDimensionsEvent(List.of("minecraft:overworld"))));
+    }
+
+    @Test
+    @Tag("REQ-PROTO-005")
+    @DisplayName("新事件 map_region 基线登记：事件键含 dimension/regions；regions 元素键集恰为 rx/rz/format/xor/sha1/b64")
+    void newRegionDtoFieldsRegistered() {
+        String json = GSON.toJson(new MapRegionEvent("minecraft:overworld", List.of(
+                new RegionPayloadModel(1, -2, "zlib-pal8", 0x1234abcd, "0".repeat(40), "AA"))));
+        assertBaseline(Set.of("dimension", "regions"), json);
+        JsonObject obj = JsonParser.parseString(json).getAsJsonObject();
+        assertEquals("MapRegionEvent", obj.get("event_name").getAsString());
+        assertEquals("map_region", obj.get("sub_type").getAsString());
+        JsonObject region = obj.getAsJsonArray("regions").get(0).getAsJsonObject();
+        assertEquals(Set.of("rx", "rz", "format", "xor", "sha1", "b64"), region.keySet(),
+                "区域载荷键集恰为六词，无多余键");
+        assertEquals(1, region.get("rx").getAsInt());
+        assertEquals(-2, region.get("rz").getAsInt());
     }
 
     private static void assertBaseline(Set<String> payloadFields, String json) {

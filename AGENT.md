@@ -6,7 +6,7 @@
 
 把 Minecraft 服务端的「顶层方块地图 + 玩家位置」以事件形式经 **鹊桥（QueQiao）事件桥**
 推给 Web 地图。多加载器（Fabric / Forge / NeoForge）多版本，一套主结构。
-当前里程碑：M1 = Forge 1.20.1 骨架 ✅（编译通过、jar 产出、reobf 完成、审计修复落地）。
+当前里程碑：mapstore + map_region（mca→本地二维地图库→区域流，实现进行中，见 §7）；此前 M1 = Forge 1.20.1 骨架 ✅（编译通过、jar 产出、reobf 完成、审计修复落地）。
 
 ## 2. 仓库结构（已按此搭建）
 
@@ -82,7 +82,9 @@ gradlew :common:test      &REM JUnit5 单元 + 冒烟测试（common/src/test）
    零流量，不存在任何降级通道或直连 WebSocket。
 3. `send()` 返回 false = 静默丢弃/退回队列，绝不抛异常打断服务端；所有钩子外层 catch Throwable。
 4. `GlobalContext` 只允许出现在 `sender/QueQiaoSink.java` 一个文件里。
-5. 不用 Mixin、不 fork 游戏。只从内存取区块（区块加载/方块改动事件时机），绝不读 region 文件。
+5. 不用 Mixin、不 fork 游戏。主线程采样只从内存取区块（区块加载/方块改动事件时机），任何情况下不得在主线程读盘、绝不读 region 文件。
+   **边界**：仅 mapstore 回填线程（`BackfillEngine` 自有后台守护线程）允许【后台只读】存档的 mca 区域文件（单文件/chunk 异常吞、mtime 增量跳过）；
+   任何情况下不得写 `region/`——本 mod 自有数据只写 store 目录（`<worldSaveRoot>/queqiao_map_web/store/`，蓝图 docs/DESIGN_MAPSTORE.md，语义见 ARCHITECTURE.md §5.5）。
 6. 禁止每 tick 全量广播：移动中 ~2.5Hz、静止心跳 ~0.67Hz、位移阈值 1.5 格；
    瓦片 8x8 区块合并（≈20B/区块）+ zlib 调色板索引，绝不用小 PNG（16x16 PNG=938B）。
 7. 线程纪律：主线程只做入队 + `adapter.renderChunk`（每 tick 硬上限 maxChunkRendersPerTick=64）；
@@ -95,13 +97,14 @@ gradlew :common:test      &REM JUnit5 单元 + 冒烟测试（common/src/test）
 9. 协议字段只加不改：`sub_type` 与既有字段语义永不变更，消费端必须忽略未知字段（`docs/INTEGRATION.md` §7）。
 10. **强制前置（加载器硬依赖）**：三加载器元数据一律声明 `queqiao≥0.5.0` 为强制依赖——forge `mods.toml` `mandatory=true`、neoforge `neoforge.mods.toml` `type="required"`、fabric `fabric.mod.json` `depends`，均 `ordering=AFTER`。缺鹊桥时加载器直接拒绝加载并抛异常，**没有「静默不启动」中间态**：入口类绝不写 `Class.forName` 缺席探针、缺席分支日志或降级装配（NeoForge/Fabric 入口无此逻辑，Forge 入口 2026-10-19 已清除）；「鹊桥尚未 init」的运行期静默由第 2 条的 isReady 探针独自承担（版本范围与嵌套 jar 实况见 ARCHITECTURE.md §7）。
 
-## 5. 协议（4 个 sub_type，全部 extends BaseEvent，零注册）
+## 5. 协议（5 个 sub_type，全部 extends BaseEvent，零注册）
 
 | 事件类 | sub_type | 载荷要点 |
 |---|---|---|
 | PlayerMoveEvent | player_move | players[]: uuid/nickname/x/y/z/yaw/dimension（批量，非逐人一条） |
 | MapPaletteEvent | map_palette | id + colors[]（≤256，下标0=未设置；先于任何瓦片；发一次后冻结） |
 | MapTileEvent | map_tile | dimension + tiles[]: cx/cz(瓦片左上区块坐标)/size(1或8)/format=zlib-pal8/sha1/b64 |
+| MapRegionEvent | map_region | dimension + regions[]: rx/rz(MC 区域坐标，每区域 32×32 区块=512×512 像素)/format=zlib-pal8/xor(Xaero 式库内容校验，断点续传)/sha1/b64 |
 | MapDimensionsEvent | map_dimensions | dimensions[]（连接后一次 + 清单变化重发） |
 
 `server_name/server_version/server_type/timestamp` 由鹊桥自动填充，DTO 里绝不手写。
@@ -136,6 +139,8 @@ JSON 字段名 = 单单词 camelCase 字段（Gson 反射直出，不受命名�
   二轮——drain 发送失败出口防停服死循环、停服序「静默→排空」、4 个事件钩子 catch Throwable、
   isReady 探针 volatile、forge 侧 compileOnly 防御行；另实证驳回「addListener 必须 @SubscribeEvent」误报，见 §6）
 - 依赖基线（2026-10-19）：三加载器元数据声明强制依赖 `queqiao≥0.5.0`（`929453f`）；据此删除 Forge 入口 `Class.forName` 缺席探针与「静默不启动」分支（含其 info 日志），三加载器入口类同构——任何入口**勿再引入**缺席探针/降级装配（规则见 §4.10）。
+- mapstore + map_region ← 本里程碑（2026-10-20 立项，实现进行中）：mca → 本地二维地图库（.qms，xor32/lastSentXor 断点续传）→ 区域流全量/回填，
+  蓝图 docs/DESIGN_MAPSTORE.md；语义已并入 ARCHITECTURE.md §5.5、docs/INTEGRATION.md §3.5、specs mapstore 域（REQ-MS-001…008）。
 - M2 Fabric 1.20.1 ← 下一站（听用户调度）：写 fabric/build.gradle（fabric-loom），放开 settings.gradle include，
   核对 fabric 各版本覆盖层里的 TODO 版本号（fabric/ 已有骨架源码未接入编译）
 - M3 Forge 实战联调（runServer + 鹊桥 + 消费端按 INTEGRATION.md 收事件）。随办清单：

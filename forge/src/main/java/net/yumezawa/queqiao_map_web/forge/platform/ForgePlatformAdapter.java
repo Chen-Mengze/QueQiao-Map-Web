@@ -12,6 +12,7 @@ import net.minecraft.world.level.LevelAccessor;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.chunk.LevelChunk;
 import net.minecraft.world.level.levelgen.Heightmap;
+import net.minecraft.world.level.storage.LevelResource;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.event.level.BlockEvent;
@@ -19,6 +20,7 @@ import net.minecraftforge.event.level.ChunkEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.yumezawa.queqiao_map_web.platform.PlatformAdapter;
 
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
@@ -141,6 +143,16 @@ public final class ForgePlatformAdapter implements PlatformAdapter {
     @Override
     public String platformName() {
         return "forge";
+    }
+
+    /**
+     * 世界存档根目录（world/ 本体）。1.20.1 official mappings 已知实签：
+     * MinecraftServer#getWorldPath(LevelResource) -> java.nio.file.Path，LevelResource.ROOT 常量存在。
+     * 注：forge/versions/1.20.1 依赖 jar 未落盘（gradle 未跑），javap 复核待做（AGENT §6）。
+     */
+    @Override
+    public Path worldSaveRoot() {
+        return server.getWorldPath(LevelResource.ROOT);
     }
 
     // ---------------- 加载器事件 → 契约回调 ----------------

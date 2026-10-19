@@ -5,6 +5,7 @@ import net.yumezawa.queqiao_map_web.tile.TopBlockRenderer.Sample;
 import net.yumezawa.queqiao_map_web.config.MapExtConfig;
 import net.yumezawa.queqiao_map_web.event.MapPaletteEvent;
 import net.yumezawa.queqiao_map_web.event.MapTileEvent;
+import net.yumezawa.queqiao_map_web.mapstore.MapStore;
 import net.yumezawa.queqiao_map_web.model.TilePayloadModel;
 import net.yumezawa.queqiao_map_web.platform.PlatformAdapter;
 import net.yumezawa.queqiao_map_web.platform.PlatformAdapter.ChunkPos;
@@ -67,6 +68,8 @@ public final class TileQueue {
     private final MapExtConfig config;
     private final Palette palette;
     private final Supplier<EventSink> sinkRef;
+    /** 本地地图库（REQ-TILE-006）：null = 平台未提供 worldSaveRoot，跳过写穿 */
+    private final MapStore store;
 
     private final Object lock = new Object();
     private final LinkedHashMap<String, Entry> pending = new LinkedHashMap<>();
@@ -75,11 +78,35 @@ public final class TileQueue {
     private boolean paletteSent;
     private boolean capWarned;
 
-    public TileQueue(PlatformAdapter adapter, MapExtConfig config, Palette palette, Supplier<EventSink> sinkRef) {
+    public TileQueue(PlatformAdapter adapter, MapExtConfig config, Palette palette, Supplier<EventSink> sinkRef, MapStore store) {
         this.adapter = adapter;
         this.config = config;
         this.palette = palette;
         this.sinkRef = sinkRef;
+        this.store = store;
+    }
+
+    /**
+     * 发调色板快照并冻结（顺序铁律：palette 先于任何 map_tile/map_region），只发一次。
+     * 已发过直接返回 true；发送失败返回 false 且不置位（下次再试）。
+     * flush 内部调用；RegionStreamer（后台线程）发任何区域前也必须先过本门。
+     */
+    public boolean publishPalette(EventSink sink) {
+        synchronized (lock) {
+            if (paletteSent) return true;
+            // 鹊桥 send 只是本地入队（快操作），锁内发送以保证调色板先于任何瓦片/区域
+            if (!sink.send(new MapPaletteEvent(config.paletteId, palette.colors()))) return false;
+            paletteSent = true;
+            palette.freeze();
+            return true;
+        }
+    }
+
+    /** true = 调色板快照已发出（含冻结） */
+    public boolean palettePublished() {
+        synchronized (lock) {
+            return paletteSent;
+        }
     }
 
     /** 主线程入队（区块加载 / 方块改动事件里调用），去重 */
@@ -212,17 +239,22 @@ public final class TileQueue {
             }
         }
 
-        // 量化完成、颜色已注册后才发调色板快照：发送顺序仍是 palette 先于任何 tile
-        synchronized (lock) {
-            if (!paletteSent) {
-                // 鹊桥 send 只是本地入队（快操作），锁内发送以保证调色板先于任何瓦片
-                if (!sink.send(new MapPaletteEvent(config.paletteId, palette.colors()))) {
-                    requeueEntries(batch); // 通道未就绪：整批退回，下次再刷
-                    return false;
+        // 写穿本地地图库（REQ-TILE-006）：pack 之后逐块 putChunk，与发送成败无关；
+        // 本段在后台 flush 线程（停服 drain 时为主线程）执行，逐块吞异常（FINE）
+        if (store != null) {
+            for (Captured c : batch) {
+                try {
+                    store.putChunk(c.dimension, c.sample.cx(), c.sample.cz(), c.sample.rgb24());
+                } catch (Throwable t) {
+                    LOG.log(Level.FINE, "地图库写穿失败", t);
                 }
-                paletteSent = true;
-                palette.freeze();
             }
+        }
+
+        // 量化完成、颜色已注册后才发调色板快照：发送顺序仍是 palette 先于任何 tile
+        if (!publishPalette(sink)) {
+            requeueEntries(batch); // 通道未就绪：整批退回，下次再刷
+            return false;
         }
 
         boolean allSent = true;

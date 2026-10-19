@@ -42,3 +42,14 @@
 - 给定 onServerTick 内部任一环节抛异常（含 Error），当服务端继续 tick，那么异常被吞（FINE 日志），主循环无恙。
 
 **验证**：`ModLifecycleTest#tickExceptionsSwallowed`、`QueQiaoSinkTest#sendFalseSwallowsThrowable`
+
+### REQ-LIFE-005 地图库引擎：就绪+enabled 双门启动；停服顺序 streamer→backfill→drain
+
+**SHALL**：`start()` 装配时仅当 `adapter.worldSaveRoot()` 非 null 且（backfill_enabled 或 region_stream_enabled 任一开启）才创建 MapStore，否则整链路为 null（不建任何引擎线程）。引擎启动发生在鹊桥就绪后的首个 tick：BackfillEngine 与 RegionStreamer 各启动一次（一次性门），各受自身 enabled 开关约束；启动异常吞 FINE 降级。维度清单变化（map_dimensions 发送处）须唤醒 streamer.requestRecheck()。`stop()` 顺序（入口已按 REQ-LIFE-003 先调 adapter.shutdown）：regionStreamer.stop() → backfillEngine.stop() → tileQueue.drain()——保证任何 map_region 不晚于 map_tile，且 stop() 返回时两个引擎线程已退出。
+
+**场景**：
+- 给定鹊桥未就绪 tick N 次，那么引擎字段恒 null、零线程、零 map_region 流量。
+- 给定就绪且任一开关开，那么 store 已建且开启的引擎各起一次；两开关全关或 worldSaveRoot=null 时 store 为 null、引擎不启。
+- 给定 streamer 节流发送未完时 stop，那么事件流中首个 map_tile 之后无 map_region；stop() 返回后两引擎均不在运行。
+
+**验证**：`ModLifecycleSmokeTest#enginesGatedOnReadyAndFlags`、`ModLifecycleTest#stopOrderStreamerBackfillDrain`（后者 @Tag 亦承载 REQ-MS-008，见 specs/mapstore/spec.md）

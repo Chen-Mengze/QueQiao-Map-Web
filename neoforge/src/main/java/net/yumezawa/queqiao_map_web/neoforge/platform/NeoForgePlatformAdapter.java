@@ -11,6 +11,7 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.chunk.LevelChunk;
 import net.minecraft.world.level.levelgen.Heightmap;
+import net.minecraft.world.level.storage.LevelResource;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.entity.EntityPlaceEvent;
@@ -19,6 +20,7 @@ import net.neoforged.neoforge.event.level.ChunkEvent;
 import net.neoforged.neoforge.event.tick.ServerTickEvent;
 import net.yumezawa.queqiao_map_web.platform.PlatformAdapter;
 
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
@@ -108,6 +110,16 @@ public final class NeoForgePlatformAdapter implements PlatformAdapter {
     @Override
     public String platformName() {
         return "neoforge";
+    }
+
+    /**
+     * 世界存档根目录（world/ 本体）。1.21.1 official mappings 与 Forge 同构：
+     * MinecraftServer#getWorldPath(LevelResource) -> java.nio.file.Path。
+     * 注：neoforge 侧不接本仓 javac 校验，javap 复核待做（AGENT §6）。
+     */
+    @Override
+    public Path worldSaveRoot() {
+        return server.getWorldPath(LevelResource.ROOT);
     }
 
     @SubscribeEvent
