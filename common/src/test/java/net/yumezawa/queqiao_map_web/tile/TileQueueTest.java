@@ -204,8 +204,7 @@ class TileQueueTest {
 
     @Test
     @Tag("REQ-TILE-002")
-    @Disabled("BUG: TileQueue.flush 在首次 pack 前就发送并 freeze 调色板——首个 map_palette 只含 [\"#000000\"]，pack 里 palette.indexOf 全部退化为 UNSET=0，所有瓦片像素恒为下标 0（全透明），且永久冻结无法自愈。修复后启用本测试")
-    @DisplayName("首批瓦片像素应引用真实色下标（已知主代码冻结时序缺陷，暂禁用）")
+    @DisplayName("首批瓦片像素应引用真实色下标（TDD 红→绿：修复 TileQueue.flush 先发调色板再 pack 的冻结时序缺陷）")
     void firstFlushTilesShouldCarryRealColorIndices() throws IOException {
         TileQueue q = newQueue(cfg("batch_size: 4"));
         enqueueChunks(q, 0, 0, 1, 0, 0, 1, 1, 1);

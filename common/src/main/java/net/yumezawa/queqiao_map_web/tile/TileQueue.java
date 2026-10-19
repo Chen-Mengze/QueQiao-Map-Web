@@ -24,7 +24,8 @@ import java.util.logging.Logger;
  * 距上次刷写超过 flushIntervalMs（默认 1000）强制刷。
  * 线程纪律：主线程只做入队与 renderChunk 采样（每 tick 硬上限）；
  * 量化/压缩/发送只在 runAsync 后台线程跑——后台线程绝不触碰 Level/Chunk 对象。
- * MapPaletteEvent 必须先于任何 MapTileEvent：首次刷写先发调色板，失败则本批退回队列。
+ * MapPaletteEvent 必须先于任何 MapTileEvent（发送顺序）：首次刷写先打包量化
+ * （pack 把颜色注册进调色板），再发调色板快照并冻结，最后发瓦片；调色板发送失败则本批退回队列。
  *
  * 线程安全：pending / flushing / paletteSent / capWarned 跨线程共享——
  * 主线程（enqueue / onTick / drain）与后台 flush 线程（发送失败后的 requeue、调色板标记）
@@ -183,18 +184,10 @@ public final class TileQueue {
     /** @return true = 本批全部发送成功；false = 任一 send 失败（失败部分已退回队列） */
     private boolean flush(List<Captured> batch) {
         EventSink sink = sinkRef.get();
-        synchronized (lock) {
-            if (!paletteSent) {
-                // 鹊桥 send 只是本地入队（快操作），锁内发送以保证调色板先于任何瓦片
-                if (!sink.send(new MapPaletteEvent(config.paletteId, palette.colors()))) {
-                    requeueEntries(batch); // 通道未就绪：整批退回，下次再刷
-                    return false;
-                }
-                paletteSent = true;
-                palette.freeze();
-            }
-        }
 
+        // 顺序铁律：pack 量化必须先于调色板快照——pack 把颜色注册进调色板；
+        // 若先发快照再 pack，快照只含占位色且 pack 时调色板已冻结，像素全退化为下标 0
+        // （TDD 红→绿用例：TileQueueTest#firstFlushTilesShouldCarryRealColorIndices）。
         // 按 dimension + 8x8 对齐区域分组（batch 为线程私有的已采样数据，锁外打包安全）
         Map<String, List<Captured>> groups = new HashMap<>();
         for (Captured c : batch) {
@@ -216,6 +209,19 @@ public final class TileQueue {
                     tilesByDim.computeIfAbsent(c.dimension, k -> new ArrayList<>())
                             .add(TopBlockRenderer.pack(c.sample.cx(), c.sample.cz(), 1, List.of(c.sample), palette));
                 }
+            }
+        }
+
+        // 量化完成、颜色已注册后才发调色板快照：发送顺序仍是 palette 先于任何 tile
+        synchronized (lock) {
+            if (!paletteSent) {
+                // 鹊桥 send 只是本地入队（快操作），锁内发送以保证调色板先于任何瓦片
+                if (!sink.send(new MapPaletteEvent(config.paletteId, palette.colors()))) {
+                    requeueEntries(batch); // 通道未就绪：整批退回，下次再刷
+                    return false;
+                }
+                paletteSent = true;
+                palette.freeze();
             }
         }
 
