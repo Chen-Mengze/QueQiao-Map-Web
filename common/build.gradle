@@ -17,10 +17,43 @@ java {
 }
 
 repositories {
+    // 本机镜像优先（直连有 DNS 污染）；CI 直连环境退回 mavenCentral 也能解析
+    maven { url = 'https://maven.aliyun.com/repository/public' }
     mavenCentral()
 }
 
 dependencies {
     // 编译期只要鹊桥接口；运行期鹊桥类由鹊桥本体 jar 提供 —— 绝不 shade 进来
     compileOnly files("${rootDir}/libs/queqiao-tool-0.6.8.jar")
+
+    // JUnit 5（BOM 统一版本）：TDD+SDD 流程的执行层
+    testImplementation platform('org.junit:junit-bom:5.10.2')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+
+    // 协议契约测试：Gson 反射直出 DTO JSON（与鹊桥发送路径同款序列化器）
+    testImplementation 'com.google.code.gson:gson:2.10.1'
+
+    // 鹊桥 CommonConfig 静态初始化硬依赖 snakeyaml（YAML_DUMP_OPTIONS）；测试构造事件 DTO 时需要 —— 仅测试域
+    testImplementation 'org.yaml:snakeyaml:2.2'
+
+    // 鹊桥 Config 构造器签名要求 slf4j Logger（jar 不打包 slf4j）；nop 绑定避免测试日志噪音
+    testImplementation 'org.slf4j:slf4j-api:2.0.9'
+    testImplementation 'org.slf4j:slf4j-nop:2.0.9'
+
+    // 测试编译与运行期 BaseEvent 等鹊桥类必须真实存在（与 compileOnly 同款 jar）
+    testImplementation files("${rootDir}/libs/queqiao-tool-0.6.8.jar")
+}
+
+test {
+    useJUnitPlatform()
+    testLogging {
+        events 'passed', 'skipped', 'failed'
+    }
+    // Gradle 8.8 尚无 testLogging.summary{} API：用 afterSuite 打一行汇总
+    afterSuite { desc, result ->
+        if (!desc.parent) {
+            println "TEST SUMMARY: ${result.resultType} (${result.testCount} tests, ${result.successfulTestCount} passed, ${result.failedTestCount} failed, ${result.skippedTestCount} skipped)"
+        }
+    }
 }
