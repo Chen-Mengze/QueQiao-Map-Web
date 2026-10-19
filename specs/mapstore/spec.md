@@ -1,6 +1,6 @@
 # mapstore 域 — 本地二维地图库
 
-> 域范围：`mapstore` 包六个纯 JDK 类（RegionFileReader / NbtReader / ChunkTopScanner / BlockColors / MapStore / BackfillEngine）：mca 直读、NBT 解码、块顶面扫描、方块取色、`.qms` 区域库与增量回填。权威来源：docs/DESIGN_MAPSTORE.md §2（接口契约）、AGENT.md §8（common 零 MC/第三方依赖、java.util.logging）。本域代码只在后台线程被调用，主线程语义无关。
+> 域范围：`mapstore` 包七个纯 JDK 类（RegionFileReader / NbtReader / ChunkTopScanner / BlockColors / MapStore / BackfillEngine / RegionStreamer——后者行为由 REQ-MS-007 约束）：mca 直读、NBT 解码、块顶面扫描、方块取色、`.qms` 区域库与增量回填。权威来源：docs/DESIGN_MAPSTORE.md §2（接口契约）、AGENT.md §8（common 零 MC/第三方依赖、java.util.logging）。本域代码只在后台线程被调用，主线程语义无关。
 
 ### REQ-MS-001 mca 区域文件读取与容错
 
@@ -75,12 +75,12 @@
 
 **验证**：`RegionStreamerTest#skipUnchangedXorRegionsAndThrottle`
 
-### REQ-MS-008 停服顺序：streamer → backfill → adapter.shutdown → drain
+### REQ-MS-008 停服顺序：streamer → backfill → drain（adapter.shutdown 已在入口先行）
 
-**SHALL**：停服收尾顺序必须为：① 停 RegionStreamer（停止广播）→ ② `BackfillEngine.stop()`（停后台解析，interrupt + join）→ ③ `adapter.shutdown()`（鹊桥通道关闸，之后禁止新 send）→ ④ `TileQueue.drain()`（主线程同步清队列最后发送窗口）。任何在 ③ 之后发起的发送必须被通道拒绝路径吞掉记 FINE，不得外抛。BackfillEngine 停止不得吞掉 interrupt 标志不回置（AGENT.md 线程纪律）。
+**SHALL**：停服收尾：加载器入口层（ServerStopping 钩子）先调 `adapter.shutdown()`（摘监听 + 后台池排空，REQ-LIFE-003），随后 `ModLifecycle.stop()` 内部顺序必须为：① 停 RegionStreamer（停止广播，interrupt + ≤5s join）→ ② `BackfillEngine.stop()`（停后台解析，置位 + interrupt + ≤2s join）→ ③ `TileQueue.drain()`（主线程同步清队列最后发送窗口）。drain 中任一 send 失败立即停止排空、由发送路径吞掉记 FINE，不得外抛、不得阻断停服。BackfillEngine 停止不得吞掉 interrupt 标志不回置（AGENT.md 线程纪律）。
 
 **场景**：
-- 给定一次 stop() 序列，那么四个阶段的调用顺序恰为 streamer→backfill→adapter.shutdown→drain（测试用桩记录调用序列）。
+- 给定一次停服序列，那么 adapter.shutdown 先于 ModLifecycle.stop()，stop() 内部调用顺序恰为 streamer→backfill→drain（测试用桩记录调用序列）。
 - 给定 backfill 线程正在 sleep 周期中被 stop，那么 ≤2s 内退出且不再有 putRegion 落盘。
 
 **验证**：`ModLifecycleTest#stopOrderStreamerBackfillDrain`

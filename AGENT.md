@@ -16,10 +16,11 @@ common/                 主结构：无任何 net.minecraft.* 引用
     ModLifecycle.java                    生命周期与装配（入口唯一调用者）
     config/MapExtConfig.java       queqiao_map_web.yml 极简解析（纯 JDK）
     platform/PlatformAdapter.java  ★ 平台适配接口
-    event/                         4 个事件（extends 鹊桥 BaseEvent）
-    model/                         PlayerPosModel / TilePayloadModel
+    event/                         5 个事件（extends 鹊桥 BaseEvent）
+    model/                         PlayerPosModel / TilePayloadModel / RegionPayloadModel
     sampler/                       PositionSampler（仅玩家位置采样）
     tile/                          TileQueue / Palette / TopBlockRenderer（瓦片功能集）
+    mapstore/                      MapStore(.qms) / BackfillEngine / RegionStreamer / RegionFileReader / NbtReader / ChunkTopScanner / BlockColors（二维地图库与回填/区域流）
     sender/                        EventSink / QueQiaoSink（唯一通道，鹊桥前置）
   src/test/java/               JUnit5 测试：每方法 @Tag("REQ-XXX-NNN")；冒烟类 *SmokeTest + @Tag("smoke")
 forge/
@@ -109,7 +110,7 @@ gradlew :common:test      &REM JUnit5 单元 + 冒烟测试（common/src/test）
 
 `server_name/server_version/server_type/timestamp` 由鹊桥自动填充，DTO 里绝不手写。
 JSON 字段名 = 单单词 camelCase 字段（Gson 反射直出，不受命名策略影响）。
-消费端契约（JSON 样例、锚点/size 语义、palette 冻结、sha1 去重、zlib-pal8 解码步骤）见 `docs/INTEGRATION.md`。
+消费端契约（JSON 样例、锚点/size 语义、palette 冻结、sha1/xor 去重与断点续传、zlib-pal8 解码步骤、§9 端到端教程）见 `docs/INTEGRATION.md`。
 
 ## 6. 平台 API 矩阵（已按实况 javap/源码核对）
 
@@ -149,7 +150,7 @@ JSON 字段名 = 单单词 camelCase 字段（Gson 反射直出，不受命名�
   ServerStarted 前已加载区块的节流补扫（不补则重启后旧区域空白到玩家回访）；
   REGION_MERGE_MIN=4 带宽取舍写入 INTEGRATION；mods.toml 可选字段（displayTest/logoFile）
 - M4 NeoForge 1.21.1 / 26.1（ModDevGradle；填 neo_version TODO）
-- M5 开放接入层：4 事件契约冻结 + docs/INTEGRATION.md（接入说明与解析解释；第三方含 owner 自有项目按文档适配）
+- M5 开放接入层：5 事件契约冻结 + docs/INTEGRATION.md（接入说明与解析解释；第三方含 owner 自有项目按文档适配）
 - M6 开整备：LICENSE / README / CI
 
 ## 8. 代码风格

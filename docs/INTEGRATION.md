@@ -38,11 +38,11 @@
 ```
 鹊桥 init 完成 + 服务端启动  →  mod 才开始发送（此前完全静默，零流量）
   1. map_dimensions   连接建立后一次；之后清单变化时重发（5s 巡检）
-  2. map_palette      任何 map_tile / map_region 之前必达；每连接一次；发出后即冻结
+  2. map_palette      任何 map_tile / map_region 之前必达；每个服务端会话一次（WS 重连不重放）；发出后即冻结
   3. player_move / map_tile / map_region   持续批量流（map_region 为区域全量/续传流，节流见 §6）
 ```
 
-消费端建议：收到 `map_palette` 之前缓存的 `map_tile` 要么丢弃、要么挂起等调色板；按 `(dimension, paletteId)` 做瓦片缓存键。
+消费端建议：收到 `map_tile` 但尚无调色板时要么丢弃、要么挂起等调色板；调色板按 `(server_name, paletteId)` 缓存（WS 重连不会重放 palette，落盘最稳，见 §9.2）。
 
 ## 3. 事件契约与 JSON 样例
 
@@ -69,7 +69,7 @@
 
 - `colors` ≤ 256 项，每项 `#RRGGBB`；**下标即像素值**（见 §4）。
 - `colors[0]` 固定 `#000000`，语义是**未设置**（见 §4.3），渲染成透明，不要画黑。
-- 发出后调色板**冻结**：本次连接内所有瓦片都用它量化。服务端重启/调色板版本升级会带**新 id** 重发
+- 发出后调色板**冻结**：本次服务端会话内所有瓦片都用它量化。服务端重启会**重发**（按配置 id）；调色板内容升级先递增 id（`…-a` → `…-b`）再发（见 §7）
   （`vanilla-1.20.1-a` → `-b` 递增修订位）。
 
 ### 3.3 player_move — 玩家位置（批量）
@@ -240,3 +240,252 @@ region_stream_max_regions_per_event: 4   # 单事件最多区域数（钳制 ≥
 
 注意包名风险：tool `0.6.8` 是 `com.github.theword.queqiao.tool.*`，新 `queqiao-core` 是 `io.github.theword.queqiao.core.*`
 （详见 ARCHITECTURE.md §7）。跨版本前先 `javap` 核对，别凭记忆。
+
+## 9. 教程案例：端到端最小消费端
+
+本节把 §1–§6 串成可运行的最小闭环：部署二选一 → 单文件 Python 消费端 → 时序预期与排错。
+示例仅作教程；生产接入仍以 §5 健壮性清单为验收线。
+
+### 9.1 部署与连接（二选一）
+
+通道拓扑由**鹊桥本体**的 config.yml 决定，两种模式**只启用其一**；本 mod 侧要
+`config/QueQiao/queqiao_map_web.yml` 的 `enabled: true`（§6）才有流量，否则全链路零流量。
+
+**模式 A（推荐）：第三方自跑 WS 服务器，鹊桥作客户端主动外连**——地址在第三方手里，防火墙只开第三方端：
+
+```yaml
+# 鹊桥 config.yml
+websocket_client:
+  enable: true
+  url_list: ["ws://<第三方IP>:8080/minecraft/ws"]   # 指向第三方监听（§9.2 模式 A）
+  access_token: "<共享密钥>"                        # 与消费端一致，两端校验
+  # 断线自动重连，间隔默认 5s；其余握手字段以你所用鹊桥版本的 config.yml 注释为准
+```
+
+**模式 B：鹊桥起 WS 服务端，第三方作客户端连入**（MC 服务器需可被第三方直连）：
+
+```yaml
+# 鹊桥 config.yml
+websocket_server:
+  enable: true
+  host: "0.0.0.0"                                  # 绑定与端口按部署填
+  port: 8081
+  access_token: "<共享密钥>"                        # 与消费端一致，两端校验
+```
+
+第三方连 `ws://<MC服务器IP>:<port>`（§9.2 模式 B）。
+
+要点：`access_token` 两端一致校验，不一致直接连不上/断连（零流量先查它）；
+信封 `server_name` 用于多台 MC 服务器分流（§1、§5.5），消费端缓存与落盘目录都按它隔离；
+模式 A 鹊桥默认 5s 自动重连，WS 层断连窗口内的状态由 §9.2 的 `state.json` 兜底。
+
+### 9.2 单文件 Python 消费端（可直接运行）
+
+`pip install websockets`，其余全标准库（zlib/base64/json/struct/binascii）。
+字段名与 §2–§5 逐字段一致：路由只认 `sub_type`；palette 用 `id/colors[]`；tile 用 `cx/cz/size/format/sha1/b64`；
+region 用 `rx/rz/format/xor/sha1/b64`；解码一律 `b64 → zlib.decompress → 索引字节`，`index = pz*side + px`。
+
+```python
+#!/usr/bin/env python3
+"""queqiao_map_consumer.py — 教程示例：端到端最小消费端（§9，单文件）
+
+只依赖第三方库 websockets（pip install websockets），其余全部标准库。
+  模式 A（自跑 WS 服务器，配合鹊桥 websocket_client）：python queqiao_map_consumer.py listen
+  模式 B（连鹊桥 websocket_server）：                    python queqiao_map_consumer.py connect
+"""
+import asyncio, base64, binascii, json, os, struct, sys, time, zlib
+
+import websockets
+
+# ---------- 配置（§9.1） ----------
+SERVER_NAME = None                                   # None=收所有服务器；否则只处理该 server_name（信封分流，§5.5）
+LISTEN_HOST, LISTEN_PORT = "0.0.0.0", 8080           # 模式 A：填进鹊桥 websocket_client.url_list
+CONNECT_URL = "ws://<MC服务器IP>:<port>"             # 模式 B：鹊桥 websocket_server 的 host/port
+ACCESS_TOKEN = "<共享密钥>"                          # 两端一致校验；模式 B 按你所用鹊桥版本的握手字段（路径/头）附带
+STATE_FILE, OUT_DIR = "state.json", "out"
+OFFLINE_AFTER_S = 5.0                                # §3.3：离线判定在消费端，>5s 未更新即标离线
+
+# ---------- 状态（键全部含 server_name，多台互不串扰，§1/§5.5） ----------
+palettes = {}        # (server_name, palette id) → colors[#RRGGBB 列表]（§3.2）；JSON 落盘=重连不重放的对策
+last_palette_id = {} # server_name → 最新调色板 id（渲染入口）
+xor_of = {}          # "server|dim|rx|rz" → xor（§3.5：服务端据此决定重发；本地留档核对续传）
+grids = {}           # (server, dim, rx, rz) → bytearray(512*512) 索引网格；1 像素=1 字节=调色板下标
+dirty = set()        # 需重画 png 的网格键
+seen_sha1 = set()    # 位置键+sha1 内容寻址去重（§4.4；不落盘——重放到达也只是幂等重写，§5.6）
+players = {}         # (server, uuid) → 最近一次 upsert（§3.3）
+
+def load_state():
+    try:
+        with open(STATE_FILE, encoding="utf-8") as f:
+            s = json.load(f)
+        for server, pid, colors in s.get("palettes", []):
+            palettes[(server, pid)] = colors
+            last_palette_id.setdefault(server, pid)
+        xor_of.update(s.get("xors", {}))
+    except FileNotFoundError:
+        pass
+
+def save_state():
+    with open(STATE_FILE, "w", encoding="utf-8") as f:
+        json.dump({"palettes": [[s, p, c] for (s, p), c in palettes.items()],
+                   "xors": xor_of}, f, ensure_ascii=False)
+
+# ---------- 纯标准库 PNG 写出（RGB8；zlib 压缩 + crc32 分块） ----------
+def write_png(path, w, h, rgb):
+    raw = b"".join(b"\x00" + rgb[y * w * 3:(y + 1) * w * 3] for y in range(h))
+    def chunk(tag, data):
+        return (struct.pack(">I", len(data)) + tag + data +
+                struct.pack(">I", binascii.crc32(tag + data) & 0xFFFFFFFF))
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "wb") as f:
+        f.write(b"\x89PNG\r\n\x1a\n"
+                + chunk(b"IHDR", struct.pack(">IIBBBBB", w, h, 8, 2, 0, 0, 0))
+                + chunk(b"IDAT", zlib.compress(raw, 6))
+                + chunk(b"IEND", b""))
+
+def flush_pngs():
+    for key in list(dirty):
+        server, dim, rx, rz = key
+        colors = palettes.get((server, last_palette_id.get(server)))
+        if not colors:
+            continue                                   # §5.3：调色板缺 → 挂起等新 map_palette
+        colors = colors + ["#000000"] * (256 - len(colors))
+        tbl = [bytes.fromhex("101010") if i == 0 else
+                bytes.fromhex(colors[i][1:3]) + bytes.fromhex(colors[i][3:5]) + bytes.fromhex(colors[i][5:7])
+                for i in range(256)]
+        # 下标 0 契约上是「未设置=透明」（§4.3）；示例 PNG 不带 alpha，画 #101010 深灰占位，勿当真值
+        write_png(os.path.join(OUT_DIR, server, dim.replace(":", "_"), f"region_{rx}_{rz}.png"),
+                  512, 512, b"".join(tbl[b] for b in grids[key]))
+        dirty.discard(key)
+
+# ---------- map_tile 局部覆盖进所属 512 网格（rx=cx>>5；§3.5 叠加幂等） ----------
+def overlay_tile(server, dim, cx, cz, size, idx):
+    side = size * 16                                   # §4.1：side = size*16 像素
+    x0, z0 = cx * 16, cz * 16                          # 绝对方块坐标；1 像素 = 1 方块列
+    for pz in range(side):                             # 行优先 index = pz*side + px（§4.2）
+        az = z0 + pz
+        rz, lz = az >> 9, az & 511                     # Python >> 是算术移位：负坐标=floorDiv，与 MC 区域坐标一致
+        x = x0
+        while x < x0 + side:                           # 8×8 瓦片可跨区域边界：按 512 边界切段落多个网格
+            rx = x >> 9
+            w = min(x0 + side - x, ((rx + 1) << 9) - x)
+            g = grids.setdefault((server, dim, rx, rz), bytearray(512 * 512))
+            dst, src = lz * 512 + (x & 511), (x - x0) + pz * side
+            g[dst:dst + w] = idx[src:src + w]          # 局部覆盖：按位置键写入即幂等（§5.6）
+            dirty.add((server, dim, rx, rz))
+            x += w
+
+# ---------- 路由：只看 sub_type（§1 铁律）；每消息 try/except（§5.4） ----------
+async def handle(raw):
+    try:
+        m = json.loads(raw)
+    except Exception as e:
+        print("[skip] 非法 JSON:", e); return
+    st = m.get("sub_type")
+    if st not in ("map_dimensions", "map_palette", "player_move", "map_tile", "map_region"):
+        return                                         # §5.1：未知 sub_type/字段忽略（前向兼容）
+    server = m.get("server_name", "?")
+    if SERVER_NAME and server != SERVER_NAME:
+        return
+    try:
+        if st == "map_dimensions":
+            print("[dims]", server, m.get("dimensions"))          # §3.1：registry key，直接生成页签
+        elif st == "map_palette":
+            pid, colors = m["id"], m["colors"]
+            palettes[(server, pid)] = colors
+            last_palette_id[server] = pid
+            save_state()                                            # palette 只在服务端启动后发一次：落盘防 WS 重连
+            print("[palette]", server, pid, f"{len(colors)} colors")
+        elif st == "player_move":
+            now = time.monotonic()
+            for p in m.get("players", []):                          # §3.3：批内 upsert 语义，非逐人一条
+                players[(server, p["uuid"])] = {**p, "ts": now, "offline": False}
+            print(f"[move] {server} {len(m.get('players', []))} 玩家 upsert")
+        elif st == "map_tile":
+            dim = m["dimension"]
+            for t in m.get("tiles", []):
+                if t.get("format") != "zlib-pal8":
+                    print("[skip] 未知 format:", t.get("format")); continue   # §5.2
+                key = (server, dim, t["cx"], t["cz"], t["size"], t["sha1"])
+                if key in seen_sha1: continue                       # §4.4：位置键+sha1 去重
+                seen_sha1.add(key)
+                idx = zlib.decompress(base64.b64decode(t["b64"]))   # §4.2 三步：b64→inflate→索引
+                overlay_tile(server, dim, t["cx"], t["cz"], t["size"], idx)
+        elif st == "map_region":
+            dim = m["dimension"]
+            for rg in m.get("regions", []):
+                if rg.get("format") != "zlib-pal8":
+                    print("[skip] 未知 format:", rg.get("format")); continue
+                key = (server, dim, rg["rx"], rg["rz"], rg["sha1"])
+                if key in seen_sha1: continue                       # §3.5：消费端按 sha1（压缩字节摘要）去重
+                seen_sha1.add(key)
+                idx = zlib.decompress(base64.b64decode(rg["b64"]))
+                if len(idx) != 512 * 512:
+                    print("[skip] 区域载荷长度异常:", len(idx)); continue
+                grids[(server, dim, rg["rx"], rg["rz"])] = bytearray(idx)  # 区域=整块替换（§3.5）
+                xor_of[f"{server}|{dim}|{rg['rx']}|{rg['rz']}"] = rg.get("xor")  # xor 留档：xor 变=服务端重发过
+                dirty.add((server, dim, rg["rx"], rg["rz"]))
+    except Exception as e:
+        print("[skip] 解析异常兜底（绝不抛回接收循环）:", repr(e))   # §5.4
+
+async def stream(ws):
+    async for raw in ws:
+        await handle(raw)
+
+async def janitor():
+    while True:
+        await asyncio.sleep(1.0)
+        now = time.monotonic()
+        for (server, uuid), p in players.items():
+            if not p["offline"] and now - p["ts"] > OFFLINE_AFTER_S:
+                p["offline"] = True
+                print(f"[offline] {server} {p.get('nickname')} ({p.get('dimension')})")
+        flush_pngs()
+
+async def main():
+    load_state()
+    mode = (sys.argv[1] if len(sys.argv) > 1 else "listen").lower()
+    jan = asyncio.create_task(janitor())
+    try:
+        if mode == "listen":      # 模式 A：本端跑 WS 服务器，鹊桥 websocket_client 主动连进来（断线它自己重连，默认 5s）
+            async def per_client(ws, *args):
+                print("[conn] 鹊桥已连入:", ws.remote_address)
+                await stream(ws)
+            async with websockets.serve(per_client, LISTEN_HOST, LISTEN_PORT):
+                print(f"[listen] ws://{LISTEN_HOST}:{LISTEN_PORT} —— 把地址填进鹊桥 websocket_client.url_list")
+                await asyncio.Future()
+        else:                     # 模式 B：鹊桥 websocket_server 起服务端，本端作客户端连入
+            uri = CONNECT_URL     # ACCESS_TOKEN 按你所用鹊桥版本的握手方式附带（两端一致校验，§9.1）
+            async with websockets.connect(uri) as ws:
+                print("[conn]", uri)
+                await stream(ws)
+    finally:
+        jan.cancel()
+        save_state()
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+行为摘要：五 `sub_type` 路由、未知忽略；`map_palette` 按 `(server_name, id)` 缓存并 JSON 落盘；
+`map_region` 去重后整块替换 512×512 网格、纯标准库写 `region_<rx>_<rz>.png`；
+`map_tile` 去重后局部覆盖进所属网格（`rx = cx >> 5`，跨界瓦片按行切段）；
+`player_move` upsert + >5s 标离线；每条消息独立 `try/except`，异常不打断连接（§5.4）。
+
+### 9.3 启动时序预期与排错清单
+
+正常时序（§2 的发送端保证）：
+
+| 时间点 | 应看到 |
+|---|---|
+| 启动后 ~5s | 一条 `map_dimensions`（之后 5s 巡检跟变化） |
+| 紧随 | 首刷 `map_palette`（服务端启动后发一次，随后冻结） |
+| 持续 | `map_tile` / `player_move` 增量流；老服务器首会话另有 `map_region` 全量补发，按默认 64 KB/s ≈ 2000 区域 10–20 分钟（§3.5 预算） |
+
+排错：
+
+- **任何阶段零流量**：依次查 本 mod `enabled: true` → 鹊桥 init 完成（此前 mod 完全静默，§2）→ 两模式恰好启用其一、`url_list`/host:port 正确、防火墙放行 → `access_token` 两端一致。
+- **只有 `map_tile` 没有 `map_region`**：`region_stream_enabled` 未开（§6），或服务端 `worldSaveRoot()` 不支持导致 mapstore 关闭、仅剩实时流（见 ARCHITECTURE.md §5.5）；再看 `backfill_enabled` 与 store 目录是否已有 `.qms`。
+- **重连后没有重复 region 流**：这是正常——xor 续传生效（§3.5），服务端判定你已一致，只有新增/变化区域会流。
+- **重连收不到 `map_palette`**：palette 只在服务端启动后发一次、WS 重连不重放；§9.2 的 `state.json` 缓存就是对策，不要因此挂起全部渲染。
+- **图大面积深灰**：该范围索引全 0（未采样，§4.3），不是解码错误；等回填/区域流追上即可。

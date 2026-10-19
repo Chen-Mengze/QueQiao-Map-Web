@@ -108,6 +108,10 @@ region_stream_max_regions_per_event: 4 # 钳制 ≥1 ≤16
 - AGENT.md §4.5 改写：主线程采样仍内存唯一（禁读 region 文件）；仅 mapstore 回填线程允许后台只读 mca；任何情况下不得在主线程读盘。
 - ARCHITECTURE.md：新增「地图库与区域流」节（并入本设计语义）；§5 带宽补 map_region 表。
 - specs：新域 mapstore（REQ-MS-001 mca读取与容错、002 NBT双格式解码、003 TopScanner打包位序、004 BlockColors兜底、005 qms 格式+xor、006 回填跳过/节流、007 区域流 xor 跳过+节流、008 停服顺序 streamer→backfill→adapter→drain）；protocol 追加 REQ-PROTO-005（map_region 契约+基线快照增键 rx/rz/xor/regions/dimension）；config 追加 REQ-CFG-004（新键解析钳制）；lifecycle 追加 REQ-LIFE-005（回填/区域流受 enabled+鹊桥就绪双门）；tile 追加 REQ-TILE-006（写穿 store，store=null 时跳过）。旧 REQ 一律不动，新语义开新条。specs/README.md 域清单登记 mapstore 域。
+
+---
+
+> **实现偏差注记（2026-10-20，全仓文档审计）**：实现整体与本蓝图一致，两点澄清——① 停服实际调用顺序：加载器入口（ServerStopping 钩子）先 `adapter.shutdown()`，随后 `ModLifecycle.stop()` 内部为 streamer→backfill→drain，以上文「停服：stop() 顺序 streamer 停 → backfill 停 →（入口已 adapter.shutdown）→ tileQueue.drain()」括注为准；本节 specs 摘要中「008 停服顺序 streamer→backfill→adapter→drain」为历史简写，REQ-MS-008 已按前句口径修正。② BackfillEngine / RegionStreamer 引擎线程在鹊桥 isReady() 后首个 tick 启动（REQ-LIFE-005 门），两线程均为守护线程（`setDaemon(true)`），与蓝图「鹊桥就绪后开始」一致。
 - README 特性表加一行 map_region。
 
 ## 8. 验证手段（Gradle 缓存缺 queqiao-tool 凭据，勿碰 Gradle 网络墙）

@@ -44,7 +44,7 @@ enabled: true
 
 ```
 queqiao_map_web/
-├── common/        主结构（多加载器标准目录名）：采样 / 瓦片队列 / 调色板 / 编码 / 发送，零 net.minecraft.* 引用
+├── common/        主结构（多加载器标准目录名）：采样 / 瓦片队列 / 调色板 / 编码 / 二维地图库 / 发送，零 net.minecraft.* 引用
 ├── forge/         Forge 分支：入口 QueqiaoMapWeb + ForgePlatformAdapter（分支内唯一接触 MC 类处）
 │   └── versions/  每 MC 版本一个目录，只放 gradle.properties（版本/映射/Java 唯一真相）
 ├── fabric/        Fabric 分支（同构，M2）
@@ -85,7 +85,7 @@ gradlew.bat :common:build :forge:build
 ## 文档
 
 - [ARCHITECTURE.md](ARCHITECTURE.md) —— 设计权威：事实基础、协议契约、带宽实测、风险与里程碑。
-- [docs/INTEGRATION.md](docs/INTEGRATION.md) —— 第三方接入：JSON 契约、字段语义、zlib-pal8 解码步骤。
+- [docs/INTEGRATION.md](docs/INTEGRATION.md) —— 第三方接入：JSON 契约、字段语义、zlib-pal8 解码步骤、xor 断点续传、§9 端到端消费端教程。
 - [docs/DESIGN_MAPSTORE.md](docs/DESIGN_MAPSTORE.md) —— 设计记录：地图数据路径重设计（mca → 本地二维地图库 → 区域流全量/续传）。
 - [AGENT.md](AGENT.md) —— 开发引导（面向 AI 与人类）：发送铁律、平台 API 矩阵、代码风格。
 - [CONTRIBUTING.md](CONTRIBUTING.md) —— 命名标准与 PR 验收清单。

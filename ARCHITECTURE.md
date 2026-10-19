@@ -111,19 +111,26 @@ QueQiao Map Web/
 │       ├── ModLifecycle.java                             生命周期与装配
 │       ├── config/MapExtConfig.java                开关 / 节流 / 批量参数（含 yml 极简解析）
 │       ├── platform/PlatformAdapter.java           ★ 平台适配接口（此目录不含 MC 类）
-│       ├── event/                                  四个新增事件 DTO（继承鹊桥 BaseEvent）
+│       ├── event/                                  五个新增事件 DTO（继承鹊桥 BaseEvent）
 │       │   ├── PlayerMoveEvent.java
 │       │   ├── MapTileEvent.java
 │       │   ├── MapPaletteEvent.java
+│       │   ├── MapRegionEvent.java
 │       │   └── MapDimensionsEvent.java
 │       ├── model/
 │       │   ├── PlayerPosModel.java                 含 dimension（补 PlayerModel 缺口）
-│       │   └── TilePayloadModel.java               cx/cz/size/format/sha1/b64
+│       │   ├── TilePayloadModel.java               cx/cz/size/format/sha1/b64
+│       │   └── RegionPayloadModel.java             rx/rz/format/xor/sha1/b64
 │       ├── sampler/PositionSampler.java            玩家位置采样：差分 + 节流 + last-value 合并
 │       ├── tile/                                   瓦片功能集：刷写队列 + 调色板 + 编码
 │       │   ├── TileQueue.java                      脏区块去重 + 批量刷写
 │       │   ├── Palette.java                        共享 256 色，只发一次
 │       │   └── TopBlockRenderer.java               zlib + sha1 + base64 打包
+│       ├── mapstore/                              二维地图库与回填/区域流（纯 JDK）
+│       │   ├── MapStore.java                       .qms 区域库（xor32/lastSentXor 断点续传）
+│       │   ├── BackfillEngine.java                 后台守护线程只读 mca 回填（令牌桶）
+│       │   ├── RegionStreamer.java                 区域流 map_region（按压缩字节节流）
+│       │   └── RegionFileReader / NbtReader / ChunkTopScanner / BlockColors   mca 解码链
 │       └── sender/
 │           ├── EventSink.java                      ★ 发送器抽象
 │           └── QueQiaoSink.java                    唯一实现：GlobalContext.sendEvent（鹊桥前置）
@@ -200,6 +207,9 @@ public interface PlatformAdapter {
     byte[] renderChunk(String dimension, ChunkPos pos);
 
     List<String> listDimensions();
+
+    /** 存档根（可返回 null = 不支持：地图库关闭，仅实时流），见 §5.5 */
+    Path worldSaveRoot();
 
     void runAsync(Runnable task);
 
@@ -440,7 +450,7 @@ async def handle_mc_message(self, raw):
 `try_handle` 依次检查 `enabled`（默认 False）→ sub_type 白名单 → 全程 `try/except` 兜底， **异常只记 debug，绝不抛回 WS
 接收循环**（否则打断整条连接）。地图/位置数据 **不进 MessageHandler**，不触发 LLM、不转发 QQ。
 
-第三方消费的完整契约（JSON 样例、字段语义、zlib-pal8 解码步骤）见 `docs/INTEGRATION.md`。
+第三方消费的完整契约（JSON 样例、字段语义、zlib-pal8 解码步骤、xor 断点续传、§9 端到端教程）见 `docs/INTEGRATION.md`。
 
 ---
 
@@ -475,7 +485,7 @@ async def handle_mc_message(self, raw):
 | M2   | Fabric 1.20.1（fabric-loom）+ 位置事件    | 后端收到含 dimension 的 `player_move` |
 | M3   | 实战联调（runServer + 鹊桥 + 消费端）     | 按 `INTEGRATION.md` 解析出地图与位置  |
 | M4   | NeoForge 1.21.1 / 26.1 适配层             | 同 M2/M3                              |
-| M5   | 开放接入层：契约冻结 + `docs/INTEGRATION.md`（接入说明与解析解释） | 第三方（含 owner 自有项目）照文档独立收全 4 事件 |
+| M5   | 开放接入层：契约冻结 + `docs/INTEGRATION.md`（接入说明与解析解释） | 第三方（含 owner 自有项目）照文档独立收全 5 事件 |
 | M6   | 开源                                      | README + 协议 spec + 三平台构建       |
 
 ---
