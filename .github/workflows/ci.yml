@@ -87,10 +87,10 @@ jobs:
         run: |
           set -euo pipefail
           ALLOW="common/src/main/java/net/yumezawa/queqiao_map_web/sender/QueQiaoSink.java"
-          # 口径（lead 校正）：真引用 = 全仓库任何位置的 import …GlobalContext; 或 src/main 里的
-          # GlobalContext. 调用；注释/Javadoc（行首 //、*、/*）不算违规；测试代码里
-          # 字符串/注释的提及不算（测试真 import 它编译都过不了，import 才是真引用）
-          hits="$( { find . -name '*.java' -not -path './.git/*' -print0 \
+          # 口径（lead 校正）：真引用 = 全仓库任何 */src/main/* 里的 import …GlobalContext; 或
+          # GlobalContext. 调用；注释/Javadoc（行首 //、*、/*）不算违规；src/test 整体不在
+          # 扫描范围（测试辅助类引导真桥类/字面量断言属正当，与 GlobalContextIsolationTest 同口径）
+          hits="$( { find . -name '*.java' -not -path './.git/*' -not -path '*/src/test/*' -print0 \
               | xargs -r -0 grep -HnE 'import [^;]*[.]GlobalContext;' ; \
             find . -name '*.java' -not -path './.git/*' -path '*/src/main/*' -print0 \
               | xargs -r -0 grep -HnE 'GlobalContext[.(]' ; } \
