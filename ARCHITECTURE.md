@@ -135,7 +135,7 @@ QueQiao Map Web/
 │           ├── EventSink.java                      ★ 发送器抽象
 │           └── QueQiaoSink.java                    唯一实现：GlobalContext.sendEvent（鹊桥前置）
 │
-├── fabric/                              ← Fabric 分支：1.20.1 起（M2；src/ 是唯一接触 MC 类的地方）
+├── fabric/                              ← Fabric 分支：1.20.1 起（阶段三；src/ 是唯一接触 MC 类的地方）
 │   ├── src/main/java/net/yumezawa/queqiao_map_web/fabric/
 │   │   ├── QueqiaoMapWeb.java                       入口：ModInitializer
 │   │   └── platform/FabricPlatformAdapter.java
@@ -150,7 +150,7 @@ QueQiao Map Web/
 │   ├── src/main/templates/META-INF/mods.toml        （与 pack.mcmeta，ReplaceTokens 渲染）
 │   └── versions/1.20.1/gradle.properties
 │
-└── neoforge/                            ← NeoForge 分支：1.21.1 起（M4）
+└── neoforge/                            ← NeoForge 分支：1.21.1 起（阶段三）
     ├── src/main/java/net/yumezawa/queqiao_map_web/neoforge/
     │   ├── QueqiaoMapWeb.java                       入口：@Mod + NeoForge.EVENT_BUS
     │   └── platform/NeoForgePlatformAdapter.java

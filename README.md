@@ -48,7 +48,7 @@ queqiao_map_web/
 ├── forge/         Forge 分支：入口 QueqiaoMapWeb + ForgePlatformAdapter（分支内唯一接触 MC 类处）
 │   └── versions/  每 MC 版本一个目录，只放 gradle.properties（版本/映射/Java 唯一真相）
 ├── fabric/        Fabric 分支（同构，阶段三接入）
-└── neoforge/      NeoForge 分支（同构，M4）
+└── neoforge/      NeoForge 分支（同构，阶段三接入）
 ```
 
 数据流：服务端事件 → `PlatformAdapter`（平台契约）→ `common` 主结构 → `QueQiaoSink` → 鹊桥事件桥 → 第三方消费端。

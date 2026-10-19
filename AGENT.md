@@ -30,7 +30,7 @@ fabric/
   src/                             Fabric 入口 + FabricPlatformAdapter + fabric.mod.json（阶段三接入编译）
   versions/<ver>/gradle.properties 1.20.1 … 1.21.11（TODO 值接入编译前按官方矩阵核对）
 neoforge/
-  src/                             NeoForge 入口 + NeoForgePlatformAdapter + src/main/templates（M4）
+  src/                             NeoForge 入口 + NeoForgePlatformAdapter + src/main/templates（阶段三）
   versions/1.21.1/  versions/26.1/ 版本覆盖层
 （无 libs/）                  compileOnly 鹊桥接口按坐标 com.github.theword.queqiao:queqiao-tool 从 GitHub Packages 联网拉取（凭据 GH_USERNAME/PACKAGE_READ_ONLY_TOKEN 或 gpr.user/gpr.key；运行期由鹊桥本体提供，绝不 shade）；
                               三加载器元数据均声明强制依赖 queqiao≥0.5.0、ordering=AFTER（缺桥=加载器拒绝加载，见 §4.10）
