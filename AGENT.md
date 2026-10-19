@@ -14,7 +14,7 @@
 common/                 主结构：无任何 net.minecraft.* 引用
   src/main/java/net/yumezawa/queqiao_map_web/
     ModLifecycle.java                    生命周期与装配（入口唯一调用者）
-    config/MapExtConfig.java       queqiao-mapext.yml 极简解析（纯 JDK）
+    config/MapExtConfig.java       queqiao_map_web.yml 极简解析（纯 JDK）
     platform/PlatformAdapter.java  ★ 平台适配接口
     event/                         4 个事件（extends 鹊桥 BaseEvent）
     model/                         PlayerPosModel / TilePayloadModel

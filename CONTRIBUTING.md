@@ -9,7 +9,7 @@
 | 位置 | 类 | 说明 |
 |---|---|---|
 | 根包 queqiao_map_web | ModLifecycle | 装配 + 生命周期（平台无关核心） |
-| config/ | MapExtConfig | queqiao-mapext.yml 解析与默认值 |
+| config/ | MapExtConfig | queqiao_map_web.yml 解析与默认值（config/QueQiao/ 下） |
 | event/ | PlayerMoveEvent / MapTileEvent / MapPaletteEvent / MapDimensionsEvent | 四个上报事件（extends BaseEvent） |
 | model/ | PlayerPosModel / TilePayloadModel | Gson DTO（字段名单单词，反射直出） |
 | platform/ | PlatformAdapter（接口）；实现 = <加载器>PlatformAdapter（ForgePlatformAdapter…） | 加载器差异抹平 |

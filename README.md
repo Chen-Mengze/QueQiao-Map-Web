@@ -21,7 +21,7 @@ Minecraft 服务端 mod：把「顶层方块地图瓦片 + 玩家位置」以事
 
 1. 服务端已安装鹊桥 QueQiao Tool（本 mod 是其附属扩展，鹊桥是唯一通道；未安装时本 mod 整体不启动）。
 2. 将 `queqiao_map_web-<加载器>-<版本>+mc<MC版本>.jar`（文件名自带适配加载器标注，如 `queqiao_map_web-forge-0.0.1+mc1.20.1.jar`）放入服务端 `mods/`。
-3. 编辑服务端 `config/queqiao-mapext.yml` 开启：
+3. 编辑服务端 `config/QueQiao/queqiao_map_web.yml`（首次启动自动生成）开启：
 
 ```yml
 enabled: true

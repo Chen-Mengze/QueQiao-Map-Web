@@ -58,10 +58,10 @@ public final class ModLifecycle {
     public synchronized void start(PlatformAdapter adapter, Path configDir) {
         if (running) return;
         this.adapter = adapter;
-        this.config = MapExtConfig.load(configDir.resolve(MapExtConfig.FILE_NAME));
+        this.config = MapExtConfig.load(configDir.resolve(MapExtConfig.SUB_DIR).resolve(MapExtConfig.FILE_NAME));
 
         if (!config.enabled) {
-            LOG.info("[" + MOD_ID + "] 已安装但未启用（config/" + MapExtConfig.FILE_NAME
+            LOG.info("[" + MOD_ID + "] 已安装但未启用（config/" + MapExtConfig.SUB_DIR + "/" + MapExtConfig.FILE_NAME
                     + " 中 enabled: false），零行为零流量。");
             return;
         }
@@ -84,7 +84,7 @@ public final class ModLifecycle {
                 + " sink=" + sinkName() + " batch=" + config.batchSize);
         if (!bridgeReadyLogged) {
             LOG.warning("未检测到就绪的鹊桥：本 mod 是鹊桥的附属扩展（鹊桥为唯一通道），就绪前保持完全静默。"
-                    + "请确认服务端已安装鹊桥；不需要本功能请把 config/" + MapExtConfig.FILE_NAME + " 的 enabled 保持 false。");
+                    + "请确认服务端已安装鹊桥；不需要本功能请把 config/" + MapExtConfig.SUB_DIR + "/" + MapExtConfig.FILE_NAME + " 的 enabled 保持 false。");
         }
     }
 

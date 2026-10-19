@@ -14,7 +14,10 @@ import java.util.logging.Logger;
  */
 public final class MapExtConfig {
 
-    public static final String FILE_NAME = "queqiao-mapext.yml";
+    /** 配置挂到鹊桥本体的配置子目录：config/QueQiao/ */
+    public static final String SUB_DIR = "QueQiao";
+    /** 文件名与 mod id 同步（旧名 queqiao-mapext.yml 已废弃） */
+    public static final String FILE_NAME = "queqiao_map_web.yml";
 
     /** 兼容性第 1 层保护：总开关，默认关闭 */
     public boolean enabled = false;

@@ -48,4 +48,5 @@ jobs:
           name: QueQiao Map Web ${{ github.ref_name }}
           files: forge/build/libs/*.jar
           fail_on_missing_files: true
-          generate_release_notes: true
+          generate_release_notes: false
+          body_path: .github/RELEASE_NOTES.zh-CN.md

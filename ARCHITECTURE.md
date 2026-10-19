@@ -346,7 +346,7 @@ public interface PlatformAdapter {
 **第 1 层 · mod 端默认关闭（最关键）**
 
 ```yaml
-# config/queqiao-mapext.yml
+# config/QueQiao/queqiao_map_web.yml
 enabled: false        # 不开则一条新事件都不发
 ```
 

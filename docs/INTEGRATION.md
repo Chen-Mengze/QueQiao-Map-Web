@@ -172,7 +172,7 @@ async function decodeTile(t, colors) {
 
 ## 6. 服务端默认节流（消费端可据此估流量）
 
-`config/queqiao-mapext.yml` 默认值：
+`config/QueQiao/queqiao_map_web.yml` 默认值：
 
 ```yaml
 enabled: false                      # 不开则零流量
