@@ -31,7 +31,8 @@ fabric/
 neoforge/
   src/                             NeoForge 入口 + NeoForgePlatformAdapter + src/main/templates（M4）
   versions/1.21.1/  versions/26.1/ 版本覆盖层
-（无 libs/）                  compileOnly 鹊桥接口按坐标 com.github.theword.queqiao:queqiao-tool 从 GitHub Packages 联网拉取（凭据 GH_USERNAME/PACKAGE_READ_ONLY_TOKEN 或 gpr.user/gpr.key；运行期由鹊桥本体提供，绝不 shade）
+（无 libs/）                  compileOnly 鹊桥接口按坐标 com.github.theword.queqiao:queqiao-tool 从 GitHub Packages 联网拉取（凭据 GH_USERNAME/PACKAGE_READ_ONLY_TOKEN 或 gpr.user/gpr.key；运行期由鹊桥本体提供，绝不 shade）；
+                              三加载器元数据均声明强制依赖 queqiao≥0.5.0、ordering=AFTER（缺桥=加载器拒绝加载，见 §4.10）
 specs/                             行为规格（SDD 唯一契约源）：<域>/spec.md，「### REQ-<域>-NNN」条目（见 specs/README.md）
 ```
 
@@ -47,6 +48,8 @@ gradlew :forge:build -PmcTarget=1.20.1    &REM 指定版本覆盖层
 ```
 
 - Gradle wrapper 8.8（跑 Gradle 本身用 JDK 17–21；1.21.x 分支 toolchain 自动切 LibericaJDK-21）。
+- 解析依赖需 GitHub Packages 凭据（环境变量 `GH_USERNAME`+`PACKAGE_READ_ONLY_TOKEN`，或 `~/.gradle/gradle.properties` 的 `gpr.user`/`gpr.key`；CI 注入 `secrets.GITHUB_TOKEN`）：
+  新机缺凭据时 queqiao-tool 解析报 401 Unauthorized；固定版本属 non-changing 依赖，本机 Gradle 缓存已命中过即可 `--offline` 离线编译。
 - 元数据模板放 `<loader>/src/main/templates/`，processResources 用 Ant ReplaceTokens（`@token@`）渲染；
   **禁用 filesMatching/expand/eachFile**——那类 DSL 产生 MatchingCopyAction，IDEA 资源模型解析不了会告警。
 - `gradle.properties` 按 ISO-8859-1 读取：中文值必须 `\\uXXXX` 转义（`mod_authors` 即此法），否则注入模板时双重编码。
@@ -90,6 +93,7 @@ gradlew :common:test      &REM JUnit5 单元 + 冒烟测试（common/src/test）
    停服顺序：先 `adapter.shutdown()`（摘监听+后台池排空）再 drain，保证 drain 时唯一发送者是主线程。
 8. dimension 一律 registry key（如 `minecraft:the_nether`），绝不用世界文件夹名。
 9. 协议字段只加不改：`sub_type` 与既有字段语义永不变更，消费端必须忽略未知字段（`docs/INTEGRATION.md` §7）。
+10. **强制前置（加载器硬依赖）**：三加载器元数据一律声明 `queqiao≥0.5.0` 为强制依赖——forge `mods.toml` `mandatory=true`、neoforge `neoforge.mods.toml` `type="required"`、fabric `fabric.mod.json` `depends`，均 `ordering=AFTER`。缺鹊桥时加载器直接拒绝加载并抛异常，**没有「静默不启动」中间态**：入口类绝不写 `Class.forName` 缺席探针、缺席分支日志或降级装配（NeoForge/Fabric 入口无此逻辑，Forge 入口 2026-10-19 已清除）；「鹊桥尚未 init」的运行期静默由第 2 条的 isReady 探针独自承担（版本范围与嵌套 jar 实况见 ARCHITECTURE.md §7）。
 
 ## 5. 协议（4 个 sub_type，全部 extends BaseEvent，零注册）
 
@@ -131,6 +135,7 @@ JSON 字段名 = 单单词 camelCase 字段（Gson 反射直出，不受命名�
   适配器 register/unregister 生命周期、瓦片队列加锁、鹊桥缺席探针、重启维度基线清空；
   二轮——drain 发送失败出口防停服死循环、停服序「静默→排空」、4 个事件钩子 catch Throwable、
   isReady 探针 volatile、forge 侧 compileOnly 防御行；另实证驳回「addListener 必须 @SubscribeEvent」误报，见 §6）
+- 依赖基线（2026-10-19）：三加载器元数据声明强制依赖 `queqiao≥0.5.0`（`929453f`）；据此删除 Forge 入口 `Class.forName` 缺席探针与「静默不启动」分支（含其 info 日志），三加载器入口类同构——任何入口**勿再引入**缺席探针/降级装配（规则见 §4.10）。
 - M2 Fabric 1.20.1 ← 下一站（听用户调度）：写 fabric/build.gradle（fabric-loom），放开 settings.gradle include，
   核对 fabric 各版本覆盖层里的 TODO 版本号（fabric/ 已有骨架源码未接入编译）
 - M3 Forge 实战联调（runServer + 鹊桥 + 消费端按 INTEGRATION.md 收事件）。随办清单：
