@@ -20,4 +20,10 @@ Thumbs.db
 # logs
 *.log
 
+# 本地工具链解压残留（CPython 分发包等）
+/Python/
+
+# 本地运行残留（服务端 plugins 目录）
+/common/plugins/
+
 # libs/ 是 compileOnly 依赖，必须入库，不要忽略
