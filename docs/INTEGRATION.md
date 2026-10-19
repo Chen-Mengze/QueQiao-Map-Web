@@ -23,13 +23,13 @@
 
 | sub_type | 事件类 | 载荷 |
 |---|---|---|
-| `map_dimensions` | EvtMapDimensions | dimensions[] |
-| `map_palette` | EvtMapPalette | id, colors[] |
-| `player_move` | EvtPlayerMove | players[] |
-| `map_tile` | EvtMapTile | dimension, tiles[] |
+| `map_dimensions` | MapDimensionsEvent | dimensions[] |
+| `map_palette` | MapPaletteEvent | id, colors[] |
+| `player_move` | PlayerMoveEvent | players[] |
+| `map_tile` | MapTileEvent | dimension, tiles[] |
 
 - `server_name / server_version / server_type / timestamp` 由鹊桥在发送路径自动填充；消费端可用来区分多台服务器。
-- 事件名（`EvtPlayerMove` 等）与 postType（`notice`）也在信封里，但键名以鹊桥实际输出为准——**不要依赖它们路由**，只认 `sub_type`。
+- 事件名（`PlayerMoveEvent` 等）与 postType（`notice`）也在信封里，但键名以鹊桥实际输出为准——**不要依赖它们路由**，只认 `sub_type`。
 - **前向兼容铁律**：遇到未知 `sub_type`、未知字段，一律忽略而不是报错。协议只会加字段，不改语义（§7）。
 
 ## 2. 连接时序（发送端保证的顺序）
@@ -202,8 +202,8 @@ dimension_check_interval_ms: 5000
 
 如果消费端本身跑在鹊桥进程内（如另一台服务器上的 Java 扩展），可直接引用：
 
-- `origin` 模块产物（无任何 `net.minecraft.*` 依赖）：`event/EvtPlayerMove|EvtMapTile|EvtMapPalette|EvtMapDimensions`、
-  `model/MdlPlayerPos|MdlTilePayload`；
+- `origin` 模块产物（无任何 `net.minecraft.*` 依赖）：`event/PlayerMoveEvent|MapTileEvent|MapPaletteEvent|MapDimensionsEvent`、
+  `model/PlayerPosModel|TilePayloadModel`；
 - `compileOnly libs/queqiao-tool-0.6.8.jar`（运行期类由鹊桥本体提供，两边类加载器互通；绝不把 tool 打进自己 jar）。
 
 注意包名风险：tool `0.6.8` 是 `com.github.theword.queqiao.tool.*`，新 `queqiao-core` 是 `io.github.theword.queqiao.core.*`

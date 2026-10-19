@@ -1,8 +1,8 @@
 package net.yumezawa.queqiao_map_web.sampler;
 
-import net.yumezawa.queqiao_map_web.config.CfgMapExt;
-import net.yumezawa.queqiao_map_web.model.MdlPlayerPos;
-import net.yumezawa.queqiao_map_web.platform.PlatAdapter.PlayerSnapshot;
+import net.yumezawa.queqiao_map_web.config.MapExtConfig;
+import net.yumezawa.queqiao_map_web.model.PlayerPosModel;
+import net.yumezawa.queqiao_map_web.platform.PlatformAdapter.PlayerSnapshot;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -16,28 +16,28 @@ import java.util.Set;
  * 禁止每 tick 全量广播——移动中 moveActiveIntervalMs，静止退到 moveIdleIntervalMs 心跳，
  * 位移小于阈值且未到心跳时间则完全跳过。主线程调用。
  */
-public final class SmpPosition {
+public final class PositionSampler {
 
     private static final class Last {
-        final MdlPlayerPos model;
+        final PlayerPosModel model;
         final long sentAtMs;
 
-        Last(MdlPlayerPos model, long sentAtMs) {
+        Last(PlayerPosModel model, long sentAtMs) {
             this.model = model;
             this.sentAtMs = sentAtMs;
         }
     }
 
-    private final CfgMapExt config;
+    private final MapExtConfig config;
     private final Map<String, Last> state = new HashMap<>();
 
-    public SmpPosition(CfgMapExt config) {
+    public PositionSampler(MapExtConfig config) {
         this.config = config;
     }
 
     /** 返回本 tick 应上报的批量（空表 = 什么都不发） */
-    public List<MdlPlayerPos> sample(List<PlayerSnapshot> snapshots, long nowMs) {
-        List<MdlPlayerPos> out = new ArrayList<>();
+    public List<PlayerPosModel> sample(List<PlayerSnapshot> snapshots, long nowMs) {
+        List<PlayerPosModel> out = new ArrayList<>();
         Set<String> seen = new HashSet<>();
         double thresholdSq = config.moveThreshold * config.moveThreshold;
 
@@ -52,7 +52,7 @@ public final class SmpPosition {
                     || (!moved && since >= config.moveIdleIntervalMs);
             if (!due) continue;
 
-            MdlPlayerPos m = new MdlPlayerPos(s.uuid, s.name, s.x, s.y, s.z, s.yaw, s.dimension);
+            PlayerPosModel m = new PlayerPosModel(s.uuid, s.name, s.x, s.y, s.z, s.yaw, s.dimension);
             out.add(m);
             state.put(s.uuid, new Last(m, nowMs));
         }
@@ -61,7 +61,7 @@ public final class SmpPosition {
         return out;
     }
 
-    private static double distSq(MdlPlayerPos last, PlayerSnapshot now) {
+    private static double distSq(PlayerPosModel last, PlayerSnapshot now) {
         double dx = now.x - last.getX();
         double dy = now.y - last.getY();
         double dz = now.z - last.getZ();

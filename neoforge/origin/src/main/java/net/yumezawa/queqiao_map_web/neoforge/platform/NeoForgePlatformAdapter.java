@@ -17,7 +17,7 @@ import net.neoforged.neoforge.event.entity.EntityPlaceEvent;
 import net.neoforged.neoforge.event.level.BlockEvent;
 import net.neoforged.neoforge.event.level.ChunkEvent;
 import net.neoforged.neoforge.event.tick.ServerTickEvent;
-import net.yumezawa.queqiao_map_web.platform.PlatAdapter;
+import net.yumezawa.queqiao_map_web.platform.PlatformAdapter;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -26,11 +26,11 @@ import java.util.concurrent.Executors;
 import java.util.function.Consumer;
 
 /**
- * NeoForge 1.21.1（official mappings）实现 PlatAdapter。
+ * NeoForge 1.21.1（official mappings）实现 PlatformAdapter。
  * 与 Forge 1.20.1 的主要差异：ServerTickEvent.Post（无 phase 字段）、
  * Heightmap.Types（复数）、ResourceLocation.parse（构造器私有化）。
  */
-public final class PlatNeoForgeAdapter implements PlatAdapter {
+public final class NeoForgePlatformAdapter implements PlatformAdapter {
 
     private final MinecraftServer server;
     private final ExecutorService pool = Executors.newSingleThreadExecutor(r -> {
@@ -42,7 +42,7 @@ public final class PlatNeoForgeAdapter implements PlatAdapter {
     private Consumer<List<PlayerSnapshot>> tickConsumer;
     private ChunkDirtyListener chunkDirty;
 
-    public PlatNeoForgeAdapter(MinecraftServer server) {
+    public NeoForgePlatformAdapter(MinecraftServer server) {
         this.server = server;
     }
 

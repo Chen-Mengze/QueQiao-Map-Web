@@ -17,7 +17,7 @@ import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.event.level.BlockEvent;
 import net.minecraftforge.event.level.ChunkEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
-import net.yumezawa.queqiao_map_web.platform.PlatAdapter;
+import net.yumezawa.queqiao_map_web.platform.PlatformAdapter;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -28,7 +28,7 @@ import java.util.function.Consumer;
 import java.util.logging.Logger;
 
 /**
- * Forge 1.20.1（official mappings, forge 47.4.x）实现 PlatAdapter。
+ * Forge 1.20.1（official mappings, forge 47.4.x）实现 PlatformAdapter。
  * forge/origin 是本分支唯一接触 net.minecraft.* 的地方；origin 主结构不 import 任何 MC 类。
  *
  * API 实况核对（javap forge-1.20.1-47.4.28_mapped_official_1.20.1，2026-10）：
@@ -36,7 +36,7 @@ import java.util.logging.Logger;
  * ResourceLocation 单参构造器在 47.4.x 已标 deprecated-for-removal，统一走 tryParse；
  * tryParse 对非法 registry key 返回 null，正好对应「未知/未加载维度」的静默语义。
  */
-public final class PlatForgeAdapter implements PlatAdapter {
+public final class ForgePlatformAdapter implements PlatformAdapter {
 
     private static final Logger LOG = Logger.getLogger("queqiao_map_web.forge"); // §8：Logger 名 = queqiao_map_web.<platform>
 
@@ -50,7 +50,7 @@ public final class PlatForgeAdapter implements PlatAdapter {
     private Consumer<List<PlayerSnapshot>> tickConsumer;
     private ChunkDirtyListener chunkDirty;
 
-    public PlatForgeAdapter(MinecraftServer server) {
+    public ForgePlatformAdapter(MinecraftServer server) {
         this.server = server;
     }
 
@@ -77,7 +77,7 @@ public final class PlatForgeAdapter implements PlatAdapter {
         }
     }
 
-    // ---------------- PlatAdapter ----------------
+    // ---------------- PlatformAdapter ----------------
 
     @Override
     public void onTick(Consumer<List<PlayerSnapshot>> consumer) {

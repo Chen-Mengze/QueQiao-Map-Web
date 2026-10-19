@@ -13,28 +13,28 @@
 ```
 origin/                  主结构：无任何 net.minecraft.* 引用
   src/main/java/net/yumezawa/queqiao_map_web/
-    QmwLifecycle.java                    生命周期与装配（入口唯一调用者）
-    config/CfgMapExt.java       queqiao-mapext.yml 极简解析（纯 JDK）
-    platform/PlatAdapter.java  ★ 平台适配接口
+    ModLifecycle.java                    生命周期与装配（入口唯一调用者）
+    config/MapExtConfig.java       queqiao-mapext.yml 极简解析（纯 JDK）
+    platform/PlatformAdapter.java  ★ 平台适配接口
     event/                         4 个事件（extends 鹊桥 BaseEvent）
-    model/                         MdlPlayerPos / MdlTilePayload
-    sampler/                       SmpPosition / SmpTileQueue
-    render/                        RndPalette / RndTopBlock
-    sender/                        SndEvent / SndQueQiao（唯一通道，鹊桥前置）
+    model/                         PlayerPosModel / TilePayloadModel
+    sampler/                       PositionSampler / TileQueue
+    render/                        Palette / TopBlockRenderer
+    sender/                        EventSink / QueQiaoSink（唯一通道，鹊桥前置）
 forge/
-  origin/                          Forge 入口 + PlatForgeAdapter + templates/resources（该分支唯一碰 MC 类的地方）
+  origin/                          Forge 入口 + ForgePlatformAdapter + templates/resources（该分支唯一碰 MC 类的地方）
   forge-1.20.1/gradle.properties   版本覆盖层（MC 版本/映射/Java 版本唯一真相）
 fabric/
-  origin/                          Fabric 入口 + PlatFabricAdapter + fabric.mod.json（M2 接入编译）
+  origin/                          Fabric 入口 + FabricPlatformAdapter + fabric.mod.json（M2 接入编译）
   fabric-<ver>/gradle.properties   1.20.1 … 1.21.11（TODO 值接入编译前按官方矩阵核对）
 neoforge/
-  origin/                          NeoForge 入口 + PlatNeoForgeAdapter + neoforge.mods.toml 模板（M4）
+  origin/                          NeoForge 入口 + NeoForgePlatformAdapter + neoforge.mods.toml 模板（M4）
   neoforge-1.21.1/  neoforge-26.1/ 版本覆盖层
 libs/queqiao-tool-0.6.8.jar        compileOnly 鹊桥接口（运行期由鹊桥本体提供，绝不 shade）
 ```
 
 三条演化规则：**加 MC 版本 = 只加一个版本目录（仅 gradle.properties）**；加加载器 = 一个平台分支目录 + 一个适配器；
-鹊桥换 API = 换一个 SndEvent。业务代码不因版本变化。
+鹊桥换 API = 换一个 EventSink。业务代码不因版本变化。
 
 ## 3. 构建与验证
 
@@ -56,23 +56,23 @@ gradlew :forge:origin:build -PmcTarget=1.20.1    &REM 指定版本覆盖层
   javap -p -cp libs\queqiao-tool-0.6.8.jar com.github.theword.queqiao.tool.event.base.BaseEvent
   已验证（2026-10）：GlobalContext.sendEvent(BaseEvent) 存在；
   BaseEvent 三参构造器 (String eventName, String postType, String subType)；
-  getConfig() 在鹊桥 init 前返回 null —— SndQueQiao.isReady() 用它做就绪探针（2s 节流）。
+  getConfig() 在鹊桥 init 前返回 null —— QueQiaoSink.isReady() 用它做就绪探针（2s 节流）。
 
 ## 4. 发送铁律（所有平台共同遵守）
 
 1. `enabled: false`（默认）= 除一条自检日志外零行为零流量。
-2. 只有鹊桥 `GlobalContext` 完成 init 才发送：入口一律在 **ServerStarted** 之后才 `QmwLifecycle.start`；
-   `SndQueQiao.isReady()` 再探针。鹊桥是**唯一通道**（本 mod 是鹊桥的附属扩展）：未就绪前完全静默，
+2. 只有鹊桥 `GlobalContext` 完成 init 才发送：入口一律在 **ServerStarted** 之后才 `ModLifecycle.start`；
+   `QueQiaoSink.isReady()` 再探针。鹊桥是**唯一通道**（本 mod 是鹊桥的附属扩展）：未就绪前完全静默，
    零流量，不存在任何降级通道或直连 WebSocket。
 3. `send()` 返回 false = 静默丢弃/退回队列，绝不抛异常打断服务端；所有钩子外层 catch Throwable。
-4. `GlobalContext` 只允许出现在 `sender/SndQueQiao.java` 一个文件里。
+4. `GlobalContext` 只允许出现在 `sender/QueQiaoSink.java` 一个文件里。
 5. 不用 Mixin、不 fork 游戏。只从内存取区块（区块加载/方块改动事件时机），绝不读 region 文件。
 6. 禁止每 tick 全量广播：移动中 ~2.5Hz、静止心跳 ~0.67Hz、位移阈值 1.5 格；
    瓦片 8x8 区块合并（≈20B/区块）+ zlib 调色板索引，绝不用小 PNG（16x16 PNG=938B）。
 7. 线程纪律：主线程只做入队 + `adapter.renderChunk`（每 tick 硬上限 maxChunkRendersPerTick=64）；
    量化/压缩/发送只在 `adapter.runAsync` 后台线程；后台线程绝不触碰 Level/Chunk 对象
    （采样已在主线程 capture 成 RGB24 字节数组）。
-   **停服豁免**：`SmpTileQueue.drain()`（仅 ServerStopping 路径，一次性）在主线程同步采样+压缩+发送，
+   **停服豁免**：`TileQueue.drain()`（仅 ServerStopping 路径，一次性）在主线程同步采样+压缩+发送，
    不设每 tick 上限（总量受 pending_cap 封顶）；任一 send 失败立即停止排空、剩余静默丢弃——绝不阻断停服。
    停服顺序：先 `adapter.shutdown()`（摘监听+后台池排空）再 drain，保证 drain 时唯一发送者是主线程。
 8. dimension 一律 registry key（如 `minecraft:the_nether`），绝不用世界文件夹名。
@@ -82,10 +82,10 @@ gradlew :forge:origin:build -PmcTarget=1.20.1    &REM 指定版本覆盖层
 
 | 事件类 | sub_type | 载荷要点 |
 |---|---|---|
-| EvtPlayerMove | player_move | players[]: uuid/nickname/x/y/z/yaw/dimension（批量，非逐人一条） |
-| EvtMapPalette | map_palette | id + colors[]（≤256，下标0=未设置；先于任何瓦片；发一次后冻结） |
-| EvtMapTile | map_tile | dimension + tiles[]: cx/cz(瓦片左上区块坐标)/size(1或8)/format=zlib-pal8/sha1/b64 |
-| EvtMapDimensions | map_dimensions | dimensions[]（连接后一次 + 清单变化重发） |
+| PlayerMoveEvent | player_move | players[]: uuid/nickname/x/y/z/yaw/dimension（批量，非逐人一条） |
+| MapPaletteEvent | map_palette | id + colors[]（≤256，下标0=未设置；先于任何瓦片；发一次后冻结） |
+| MapTileEvent | map_tile | dimension + tiles[]: cx/cz(瓦片左上区块坐标)/size(1或8)/format=zlib-pal8/sha1/b64 |
+| MapDimensionsEvent | map_dimensions | dimensions[]（连接后一次 + 清单变化重发） |
 
 `server_name/server_version/server_type/timestamp` 由鹊桥自动填充，DTO 里绝不手写。
 JSON 字段名 = 单单词 camelCase 字段（Gson 反射直出，不受命名策略影响）。
@@ -110,7 +110,7 @@ JSON 字段名 = 单单词 camelCase 字段（Gson 反射直出，不受命名�
 | 配置目录 | FMLPaths.CONFIGDIR | 同名 | FabricLoader.getInstance().getConfigDir() |
 | 事件注册 | `addListener(方法引用)` 无需 @SubscribeEvent（eventbus 6.2.33 javap 实证：addListener 链无注解校验，注解检查只在 register(Object)；jar 内无 InvalidSubscriptionException） | M4 再核（bus 库版本不同，校验可能更严） | 不适用（回调注册） |
 
-> 命名基线：入口类 QmwLifecycle / ForgeEntry / FabricEntry / NeoForgeEntry；mod id 统一 queqiao_map_web（与包名、gradle.properties、mods.toml 一致）；Fabric 元数据是 fabric.mod.json；全工程 **无 Mixin**；鹊桥 API 使用前必须 javap 核对（见 §3）。
+> 命名基线：主入口类 QueqiaoMapWeb（三个加载器同名、包隔离，类名同步 modid）；装配核心 ModLifecycle；mod id 统一 queqiao_map_web（与包名、gradle.properties、mods.toml 一致）；Fabric 元数据是 fabric.mod.json；全工程 **无 Mixin**；鹊桥 API 使用前必须 javap 核对（见 §3）。
 
 ## 7. 里程碑
 
@@ -133,4 +133,4 @@ JSON 字段名 = 单单词 camelCase 字段（Gson 反射直出，不受命名�
 
 Java 17 语法为上限（仅 1.21.x 分支可用 21）；origin 包零 MC import、零第三方（只用 JDK + 鹊桥接口）；
 日志用 java.util.logging（各分支 Logger 名 = queqiao_map_web.<platform>）；注释中文、标识符英文。
-类命名三段式（上级目录简写-实现方式-功能）为 PR 必检项，规范与目录简写表见 CONTRIBUTING.md §1。
+类命名采用功能命名（完整英文单词；主入口类名同步 modid = QueqiaoMapWeb），为 PR 必检项，规范见 CONTRIBUTING.md §1。

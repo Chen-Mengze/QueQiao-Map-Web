@@ -29,7 +29,7 @@
 | `map_tile` | dimension + tiles[]：cx / cz / size / format / sha1 / b64 |
 | `map_dimensions` | dimensions[]（连接后一次 + 清单变化重发） |
 
-- **前置鹊桥**：本 mod 是鹊桥的附属扩展，唯一通道是鹊桥事件桥（`SndQueQiao`）；
+- **前置鹊桥**：本 mod 是鹊桥的附属扩展，唯一通道是鹊桥事件桥（`QueQiaoSink`）；
   鹊桥未就绪前完全静默、零流量，不存在降级通道。
 
 本仓库是**服务端 mod 与协议侧**，不内置接收端：数据结构与 API 对第三方开放——
@@ -39,14 +39,14 @@ Web 地图、聊天机器人或自研消费端（含 owner 自有项目）照文
 ## 代码框架
 
 ```
-服务端事件 → PlatAdapter（平台契约） → origin 主结构（抽样 / 瓦片队列 / 调色板 / 打包） → SndQueQiao → 鹊桥事件桥 → 第三方消费端（Web 地图等）
+服务端事件 → PlatformAdapter（平台契约） → origin 主结构（抽样 / 瓦片队列 / 调色板 / 打包） → QueQiaoSink → 鹊桥事件桥 → 第三方消费端（Web 地图等）
 ```
 
 - `origin/`：主结构，**零 `net.minecraft.*` 引用**——事件定义、抽样、打包、发送全部平台无关。
 - `forge|fabric|neoforge/origin/`：各加载器入口 + 一个平台适配器，是该分支唯一接触 MC 类的地方。
 - `<loader>-<ver>/`：每个 MC 版本一个目录，**只放 gradle.properties**（MC 版本 / 映射 / Java 版本唯一真相）。
 
-加一个 MC 版本 = 加一个版本目录；换一个加载器 = 加一个适配器；鹊桥换 API = 换一个 SndEvent。
+加一个 MC 版本 = 加一个版本目录；换一个加载器 = 加一个适配器；鹊桥换 API = 换一个 EventSink。
 业务代码不因版本变化。
 
 | 加载器 | 版本 | 状态 |

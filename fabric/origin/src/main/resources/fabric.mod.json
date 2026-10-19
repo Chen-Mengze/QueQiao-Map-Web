@@ -8,7 +8,7 @@
   "license": "MIT",
   "environment": "server",
   "entrypoints": {
-    "main": ["net.yumezawa.queqiao_map_web.fabric.FabricEntry"]
+    "main": ["net.yumezawa.queqiao_map_web.fabric.QueqiaoMapWeb"]
   },
   "depends": {
     "fabricloader": "${loader_version}",

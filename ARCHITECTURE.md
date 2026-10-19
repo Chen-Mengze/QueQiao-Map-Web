@@ -69,7 +69,7 @@ public PlayerChatEvent(PlayerModel playerModel, String messageId, String rawMess
 | Forge    | `ForgeTool.getForgePlayer(ServerPlayer)`         | `playerModel.setX(forgeServerPlayer.getX())` |
 | NeoForge | `NeoForgeTool.getNeoForgePlayer(ServerPlayer)`   | `player.setX(neoForgePlayer.getX())`         |
 
-**唯一缺的是 `dimension`** —— `PlayerModel` 没有该字段。这是本项目需要补的唯一数据项，也是我们自建 `MdlPlayerPos` 的理由。
+**唯一缺的是 `dimension`** —— `PlayerModel` 没有该字段。这是本项目需要补的唯一数据项，也是我们自建 `PlayerPosModel` 的理由。
 
 ### 1.4 生命周期时机（决定我们何时能发）
 
@@ -108,31 +108,31 @@ public PlayerChatEvent(PlayerModel playerModel, String messageId, String rawMess
 QueQiao Map Web/
 ├── origin/                              ← 主结构：与 MC 无关的公共业务实现
 │   └── src/main/java/net/yumezawa/queqiao_map_web
-│       ├── QmwLifecycle.java                             生命周期与装配
-│       ├── config/CfgMapExt.java                开关 / 节流 / 批量参数（含 yml 极简解析）
-│       ├── platform/PlatAdapter.java           ★ 平台适配接口（此目录不含 MC 类）
+│       ├── ModLifecycle.java                             生命周期与装配
+│       ├── config/MapExtConfig.java                开关 / 节流 / 批量参数（含 yml 极简解析）
+│       ├── platform/PlatformAdapter.java           ★ 平台适配接口（此目录不含 MC 类）
 │       ├── event/                                  四个新增事件 DTO（继承鹊桥 BaseEvent）
-│       │   ├── EvtPlayerMove.java
-│       │   ├── EvtMapTile.java
-│       │   ├── EvtMapPalette.java
-│       │   └── EvtMapDimensions.java
+│       │   ├── PlayerMoveEvent.java
+│       │   ├── MapTileEvent.java
+│       │   ├── MapPaletteEvent.java
+│       │   └── MapDimensionsEvent.java
 │       ├── model/
-│       │   ├── MdlPlayerPos.java                 含 dimension（补 PlayerModel 缺口）
-│       │   └── MdlTilePayload.java               cx/cz/size/format/sha1/b64
+│       │   ├── PlayerPosModel.java                 含 dimension（补 PlayerModel 缺口）
+│       │   └── TilePayloadModel.java               cx/cz/size/format/sha1/b64
 │       ├── sampler/
-│       │   ├── SmpPosition.java                差分 + 节流 + last-value 合并
-│       │   └── SmpTileQueue.java                      脏区块去重 + 批量刷写
+│       │   ├── PositionSampler.java                差分 + 节流 + last-value 合并
+│       │   └── TileQueue.java                      脏区块去重 + 批量刷写
 │       ├── render/
-│       │   ├── RndPalette.java                        共享 256 色，只发一次
-│       │   └── RndTopBlock.java               zlib + sha1 + base64 打包
+│       │   ├── Palette.java                        共享 256 色，只发一次
+│       │   └── TopBlockRenderer.java               zlib + sha1 + base64 打包
 │       └── sender/
-│           ├── SndEvent.java                      ★ 发送器抽象
-│           └── SndQueQiao.java                    唯一实现：GlobalContext.sendEvent（鹊桥前置）
+│           ├── EventSink.java                      ★ 发送器抽象
+│           └── QueQiaoSink.java                    唯一实现：GlobalContext.sendEvent（鹊桥前置）
 │
 ├── fabric/                              ← Fabric 分支：1.20.1 起
 │   ├── origin/                                     平台源码（唯一接触 MC 类的地方）
-│   │   ├── FabricEntry.java                       入口：ModInitializer
-│   │   ├── platform/PlatFabricAdapter.java
+│   │   ├── QueqiaoMapWeb.java                       入口：ModInitializer
+│   │   ├── platform/FabricPlatformAdapter.java
 │   │   └── resources/fabric.mod.json
 │   ├── fabric-1.20.1/gradle.properties
 │   ├── fabric-1.20.4/
@@ -145,15 +145,15 @@ QueQiao Map Web/
 │
 ├── forge/                               ← Forge 分支：仅 1.20.1
 │   ├── origin/
-│   │   ├── ForgeEntry.java                        入口：@Mod + MinecraftForge.EVENT_BUS
-│   │   ├── platform/PlatForgeAdapter.java
+│   │   ├── QueqiaoMapWeb.java                        入口：@Mod + MinecraftForge.EVENT_BUS
+│   │   ├── platform/ForgePlatformAdapter.java
 │   │   └── resources/META-INF/mods.toml
 │   └── forge-1.20.1/gradle.properties
 │
 └── neoforge/                            ← NeoForge 分支：1.21.1 起
     ├── origin/
-    │   ├── NeoForgeEntry.java                     入口：@Mod + NeoForge.EVENT_BUS
-    │   ├── platform/PlatNeoForgeAdapter.java
+    │   ├── QueqiaoMapWeb.java                     入口：@Mod + NeoForge.EVENT_BUS
+    │   ├── platform/NeoForgePlatformAdapter.java
     │   └── templates/META-INF/neoforge.mods.toml
     ├── neoforge-1.21.1/gradle.properties
     └── neoforge-26.1/gradle.properties             ⚠️ neo_version 待按官方矩阵填
@@ -163,11 +163,11 @@ QueQiao Map Web/
 ### 2.1 为什么这样分层
 
 `origin/`（主结构）里 **不出现任何 `net.minecraft.*` 类**；所有游戏侧访问收敛到
-`PlatAdapter` 接口，由 `fabric/origin`、`forge/origin`、`neoforge/origin` 各实现一份。
+`PlatformAdapter` 接口，由 `fabric/origin`、`forge/origin`、`neoforge/origin` 各实现一份。
 
 - **加 MC 版本** = 加一个 `gradle.properties` 目录（版本差异大时才在平台 origin 里加条件块）
 - **加加载器** = 加一个平台分支 + 一个适配器实现类
-- **鹊桥重构 `sendEvent`** = 换一个 `SndEvent` 实现
+- **鹊桥重构 `sendEvent`** = 换一个 `EventSink` 实现
 
 这是对"每个版本一份 fork"的结构性回答： **版本只影响配置，不影响业务代码**。
 
@@ -188,7 +188,7 @@ QueQiao Map Web/
 ## 3. 平台适配接口
 
 ```java
-public interface PlatAdapter {
+public interface PlatformAdapter {
     final class PlayerSnapshot {
         public String uuid, name;
         public double x, y, z;
@@ -225,11 +225,11 @@ public interface PlatAdapter {
 全部继承鹊桥 `BaseEvent`，因此 `event_name / post_type / timestamp` 及鹊桥自动填充的
 `server_name / server_version / server_type` 都由框架给出，后端无需额外对齐。
 
-### 4.1 EvtPlayerMove
+### 4.1 PlayerMoveEvent
 
 ```json
 {
-  "event_name": "EvtPlayerMove",
+  "event_name": "PlayerMoveEvent",
   "post_type": "notice",
   "sub_type": "player_move",
   "server_name": "...",
@@ -252,11 +252,11 @@ public interface PlatAdapter {
 
 **批量发送，非逐人逐条。** `dimension` 一律 registry key。
 
-### 4.2 EvtMapTile
+### 4.2 MapTileEvent
 
 ```json
 {
-  "event_name": "EvtMapTile",
+  "event_name": "MapTileEvent",
   "post_type": "notice",
   "sub_type": "map_tile",
   "dimension": "minecraft:overworld",
@@ -273,11 +273,11 @@ public interface PlatAdapter {
 }
 ```
 
-### 4.3 EvtMapPalette（连接后发一次）
+### 4.3 MapPaletteEvent（连接后发一次）
 
 ```json
 {
-  "event_name": "EvtMapPalette",
+  "event_name": "MapPaletteEvent",
   "post_type": "notice",
   "sub_type": "map_palette",
   "id": "vanilla-1.20.1-a",
@@ -288,11 +288,11 @@ public interface PlatAdapter {
 }
 ```
 
-### 4.4 EvtMapDimensions（连接后发一次 + 变化时）
+### 4.4 MapDimensionsEvent（连接后发一次 + 变化时）
 
 ```json
 {
-  "event_name": "EvtMapDimensions",
+  "event_name": "MapDimensionsEvent",
   "post_type": "notice",
   "sub_type": "map_dimensions",
   "dimensions": [
@@ -323,7 +323,7 @@ public interface PlatAdapter {
 1. **不要用小尺寸 PNG。** 16×16 单块 PNG 要 938 B，是 zlib 索引的 9 倍——PNG 的 IHDR+PLTE+IDAT+IEND 头部在小图上完全支配体积。
 2. **批量是最大杠杆。** 逐块 100 B/块；8×8 批量降至 **20 B/块**，差 5 倍。
 
-`SmpTileQueue` 采用 **双触发刷写**：
+`TileQueue` 采用 **双触发刷写**：
 
 - 队列攒够 `batchSize`（默认 64 = 8×8）→ 立即刷
 - 距上次刷写超过 `flushIntervalMs`（默认 1000）→ 强制刷（保地图跟上探索）
@@ -417,7 +417,7 @@ async def handle_mc_message(self, raw):
 
 | 风险                        | 缓解                                                     |
 |-----------------------------|----------------------------------------------------------|
-| 鹊桥升级改 `sendEvent` 签名 | `SndEvent` 抽象；签名漂移只改 `SndQueQiao` 一个文件，业务零改动 |
+| 鹊桥升级改 `sendEvent` 签名 | `EventSink` 抽象；签名漂移只改 `QueQiaoSink` 一个文件，业务零改动 |
 | tool 包版本/包名漂移        | 锁 jar 后反编译核对；探针未就绪则完全静默（零流量）      |
 | 渲染线程开销                | 后台线程池 + 每 tick 渲染区块数硬上限                    |
 | 老插件收到未知事件          | 见第 6 节三层保护                                        |

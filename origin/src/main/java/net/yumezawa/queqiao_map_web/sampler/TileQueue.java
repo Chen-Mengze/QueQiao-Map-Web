@@ -1,15 +1,15 @@
 package net.yumezawa.queqiao_map_web.sampler;
 
-import net.yumezawa.queqiao_map_web.config.CfgMapExt;
-import net.yumezawa.queqiao_map_web.event.EvtMapPalette;
-import net.yumezawa.queqiao_map_web.event.EvtMapTile;
-import net.yumezawa.queqiao_map_web.model.MdlTilePayload;
-import net.yumezawa.queqiao_map_web.platform.PlatAdapter;
-import net.yumezawa.queqiao_map_web.platform.PlatAdapter.ChunkPos;
-import net.yumezawa.queqiao_map_web.render.RndPalette;
-import net.yumezawa.queqiao_map_web.render.RndTopBlock;
-import net.yumezawa.queqiao_map_web.render.RndTopBlock.Sample;
-import net.yumezawa.queqiao_map_web.sender.SndEvent;
+import net.yumezawa.queqiao_map_web.config.MapExtConfig;
+import net.yumezawa.queqiao_map_web.event.MapPaletteEvent;
+import net.yumezawa.queqiao_map_web.event.MapTileEvent;
+import net.yumezawa.queqiao_map_web.model.TilePayloadModel;
+import net.yumezawa.queqiao_map_web.platform.PlatformAdapter;
+import net.yumezawa.queqiao_map_web.platform.PlatformAdapter.ChunkPos;
+import net.yumezawa.queqiao_map_web.render.Palette;
+import net.yumezawa.queqiao_map_web.render.TopBlockRenderer;
+import net.yumezawa.queqiao_map_web.render.TopBlockRenderer.Sample;
+import net.yumezawa.queqiao_map_web.sender.EventSink;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -25,13 +25,13 @@ import java.util.logging.Logger;
  * 距上次刷写超过 flushIntervalMs（默认 1000）强制刷。
  * 线程纪律：主线程只做入队与 renderChunk 采样（每 tick 硬上限）；
  * 量化/压缩/发送只在 runAsync 后台线程跑——后台线程绝不触碰 Level/Chunk 对象。
- * EvtMapPalette 必须先于任何 EvtMapTile：首次刷写先发调色板，失败则本批退回队列。
+ * MapPaletteEvent 必须先于任何 MapTileEvent：首次刷写先发调色板，失败则本批退回队列。
  *
  * 线程安全：pending / flushing / paletteSent / capWarned 跨线程共享——
  * 主线程（enqueue / onTick / drain）与后台 flush 线程（发送失败后的 requeue、调色板标记）
  * 一律在 lock 上同步；renderChunk 采样在锁外执行以缩短持锁时间。
  */
-public final class SmpTileQueue {
+public final class TileQueue {
 
     private static final Logger LOG = Logger.getLogger("queqiao_map_web.tile");
     /** 同一 8x8 区域脏块达到该数量才按 size=8 打包，否则逐块 size=1 */
@@ -63,10 +63,10 @@ public final class SmpTileQueue {
         }
     }
 
-    private final PlatAdapter adapter;
-    private final CfgMapExt config;
-    private final RndPalette palette;
-    private final Supplier<SndEvent> sinkRef;
+    private final PlatformAdapter adapter;
+    private final MapExtConfig config;
+    private final Palette palette;
+    private final Supplier<EventSink> sinkRef;
 
     private final Object lock = new Object();
     private final LinkedHashMap<String, Entry> pending = new LinkedHashMap<>();
@@ -75,7 +75,7 @@ public final class SmpTileQueue {
     private boolean paletteSent;
     private boolean capWarned;
 
-    public SmpTileQueue(PlatAdapter adapter, CfgMapExt config, RndPalette palette, Supplier<SndEvent> sinkRef) {
+    public TileQueue(PlatformAdapter adapter, MapExtConfig config, Palette palette, Supplier<EventSink> sinkRef) {
         this.adapter = adapter;
         this.config = config;
         this.palette = palette;
@@ -183,11 +183,11 @@ public final class SmpTileQueue {
 
     /** @return true = 本批全部发送成功；false = 任一 send 失败（失败部分已退回队列） */
     private boolean flush(List<Captured> batch) {
-        SndEvent sink = sinkRef.get();
+        EventSink sink = sinkRef.get();
         synchronized (lock) {
             if (!paletteSent) {
                 // 鹊桥 send 只是本地入队（快操作），锁内发送以保证调色板先于任何瓦片
-                if (!sink.send(new EvtMapPalette(config.paletteId, palette.colors()))) {
+                if (!sink.send(new MapPaletteEvent(config.paletteId, palette.colors()))) {
                     requeueEntries(batch); // 通道未就绪：整批退回，下次再刷
                     return false;
                 }
@@ -203,7 +203,7 @@ public final class SmpTileQueue {
             groups.computeIfAbsent(regionKey, k -> new ArrayList<>()).add(c);
         }
 
-        Map<String, List<MdlTilePayload>> tilesByDim = new HashMap<>();
+        Map<String, List<TilePayloadModel>> tilesByDim = new HashMap<>();
         for (List<Captured> group : groups.values()) {
             Captured first = group.get(0);
             if (group.size() >= REGION_MERGE_MIN) {
@@ -211,18 +211,18 @@ public final class SmpTileQueue {
                 List<Sample> samples = new ArrayList<>(group.size());
                 for (Captured c : group) samples.add(c.sample);
                 tilesByDim.computeIfAbsent(first.dimension, k -> new ArrayList<>())
-                        .add(RndTopBlock.pack(rx, rz, 8, samples, palette));
+                        .add(TopBlockRenderer.pack(rx, rz, 8, samples, palette));
             } else {
                 for (Captured c : group) {
                     tilesByDim.computeIfAbsent(c.dimension, k -> new ArrayList<>())
-                            .add(RndTopBlock.pack(c.sample.cx(), c.sample.cz(), 1, List.of(c.sample), palette));
+                            .add(TopBlockRenderer.pack(c.sample.cx(), c.sample.cz(), 1, List.of(c.sample), palette));
                 }
             }
         }
 
         boolean allSent = true;
-        for (Map.Entry<String, List<MdlTilePayload>> dim : tilesByDim.entrySet()) {
-            if (!sink.send(new EvtMapTile(dim.getKey(), dim.getValue()))) {
+        for (Map.Entry<String, List<TilePayloadModel>> dim : tilesByDim.entrySet()) {
+            if (!sink.send(new MapTileEvent(dim.getKey(), dim.getValue()))) {
                 requeue(dim.getKey(), dim.getValue()); // 只按坐标退回，下一 tick 主线程重新采样
                 allSent = false;
             }
@@ -234,9 +234,9 @@ public final class SmpTileQueue {
         for (Captured c : batch) enqueue(c.dimension, new ChunkPos(c.sample.cx(), c.sample.cz()));
     }
 
-    private void requeue(String dimension, List<MdlTilePayload> tiles) {
+    private void requeue(String dimension, List<TilePayloadModel> tiles) {
         synchronized (lock) {
-            for (MdlTilePayload t : tiles) {
+            for (TilePayloadModel t : tiles) {
                 if (t.getSize() == 1) {
                     if (pending.size() < config.pendingCap)
                         pending.putIfAbsent(dimension + '@' + t.getCx() + ',' + t.getCz(), new Entry(dimension, t.getCx(), t.getCz()));
