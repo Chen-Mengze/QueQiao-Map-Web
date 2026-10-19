@@ -1,4 +1,4 @@
-package net.yumezawa.queqiao_map_web.render;
+package net.yumezawa.queqiao_map_web.tile;
 
 import java.util.ArrayList;
 import java.util.HashMap;

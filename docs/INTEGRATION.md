@@ -2,7 +2,7 @@
 
 > 本文是**消费端契约**：任何第三方（owner 自有 Web 项目、AstrBot 插件、自研地图端）按本文即可
 > 独立接收并解析全部地图/位置事件。设计权威是 [ARCHITECTURE.md](../ARCHITECTURE.md)；
-> 服务端实现行为以 `origin/` 源码为准，本文与源码逐字段核对过。
+> 服务端实现行为以 `common/` 源码为准，本文与源码逐字段核对过。
 
 ## 0. 定位：开放的数据结构与 API
 
@@ -13,8 +13,8 @@
 开放面有三层，全部稳定：
 
 1. **JSON 协议**（首选消费方式）：4 个 `sub_type` 的消息 JSON，字段语义见 §2–§4。
-2. **Java DTO**（可选，给基于鹊桥的 Java 消费端）：`origin` 模块的 `event/` 与 `model/` 包即数据结构本体，
-   可 `compileOnly` 引用 `origin` 产物与 `libs/queqiao-tool-0.6.8.jar` 直接在进程内 `instanceof` 收取（绝不 shade）。
+2. **Java DTO**（可选，给基于鹊桥的 Java 消费端）：`common` 模块的 `event/` 与 `model/` 包即数据结构本体，
+   可 `compileOnly` 引用 `common` 产物与 `libs/queqiao-tool-0.6.8.jar` 直接在进程内 `instanceof` 收取（绝不 shade）。
 3. **本文档 + ARCHITECTURE.md §4**：协议契约的唯一出处，改动走版本号（见 §7）。
 
 ## 1. 信封字段与路由
@@ -196,13 +196,13 @@ dimension_check_interval_ms: 5000
 - 新增字段随时可能发生：消费端必须忽略未知字段。
 - 编码变化 = 新的 `format` 字符串（`zlib-pal8` 这个 token 不变义）。
 - 调色板内容变化 = `map_palette.id` 递增修订位（`…-a` → `…-b`）。
-- 服务端 DTO（`origin` 的 `event/` `model/`）与本文同仓演进，JSON 字段名 = 单词 camelCase 直出，不玩命名策略。
+- 服务端 DTO（`common` 的 `event/` `model/`）与本文同仓演进，JSON 字段名 = 单词 camelCase 直出，不玩命名策略。
 
 ## 8. Java 消费端：DTO 直接复用（可选）
 
 如果消费端本身跑在鹊桥进程内（如另一台服务器上的 Java 扩展），可直接引用：
 
-- `origin` 模块产物（无任何 `net.minecraft.*` 依赖）：`event/PlayerMoveEvent|MapTileEvent|MapPaletteEvent|MapDimensionsEvent`、
+- `common` 模块产物（无任何 `net.minecraft.*` 依赖）：`event/PlayerMoveEvent|MapTileEvent|MapPaletteEvent|MapDimensionsEvent`、
   `model/PlayerPosModel|TilePayloadModel`；
 - `compileOnly libs/queqiao-tool-0.6.8.jar`（运行期类由鹊桥本体提供，两边类加载器互通；绝不把 tool 打进自己 jar）。
 

@@ -11,25 +11,25 @@
 ## 2. 仓库结构（已按此搭建）
 
 ```
-origin/                  主结构：无任何 net.minecraft.* 引用
+common/                 主结构：无任何 net.minecraft.* 引用
   src/main/java/net/yumezawa/queqiao_map_web/
     ModLifecycle.java                    生命周期与装配（入口唯一调用者）
     config/MapExtConfig.java       queqiao-mapext.yml 极简解析（纯 JDK）
     platform/PlatformAdapter.java  ★ 平台适配接口
     event/                         4 个事件（extends 鹊桥 BaseEvent）
     model/                         PlayerPosModel / TilePayloadModel
-    sampler/                       PositionSampler / TileQueue
-    render/                        Palette / TopBlockRenderer
+    sampler/                       PositionSampler（仅玩家位置采样）
+    tile/                          TileQueue / Palette / TopBlockRenderer（瓦片功能集）
     sender/                        EventSink / QueQiaoSink（唯一通道，鹊桥前置）
 forge/
-  origin/                          Forge 入口 + ForgePlatformAdapter + templates/resources（该分支唯一碰 MC 类的地方）
-  forge-1.20.1/gradle.properties   版本覆盖层（MC 版本/映射/Java 版本唯一真相）
+  src/                             Forge 入口 + ForgePlatformAdapter + src/main/templates（该分支唯一碰 MC 类的地方）
+  versions/1.20.1/gradle.properties 版本覆盖层（MC 版本/映射/Java 版本唯一真相）
 fabric/
-  origin/                          Fabric 入口 + FabricPlatformAdapter + fabric.mod.json（M2 接入编译）
-  fabric-<ver>/gradle.properties   1.20.1 … 1.21.11（TODO 值接入编译前按官方矩阵核对）
+  src/                             Fabric 入口 + FabricPlatformAdapter + fabric.mod.json（M2 接入编译）
+  versions/<ver>/gradle.properties 1.20.1 … 1.21.11（TODO 值接入编译前按官方矩阵核对）
 neoforge/
-  origin/                          NeoForge 入口 + NeoForgePlatformAdapter + neoforge.mods.toml 模板（M4）
-  neoforge-1.21.1/  neoforge-26.1/ 版本覆盖层
+  src/                             NeoForge 入口 + NeoForgePlatformAdapter + src/main/templates（M4）
+  versions/1.21.1/  versions/26.1/ 版本覆盖层
 libs/queqiao-tool-0.6.8.jar        compileOnly 鹊桥接口（运行期由鹊桥本体提供，绝不 shade）
 ```
 
@@ -40,16 +40,16 @@ libs/queqiao-tool-0.6.8.jar        compileOnly 鹊桥接口（运行期由鹊桥
 
 ```bat
 set JAVA_HOME=C:\Program Files\BellSoft\LibericaJDK-17-Full   &REM Forge 1.20.1 用 JDK 17
-gradlew :origin:build :forge:origin:build        &REM 产出 forge/origin/build/libs/queqiao_map_web-*.jar
-gradlew :forge:origin:build -PmcTarget=1.20.1    &REM 指定版本覆盖层
+gradlew :common:build :forge:build                &REM 产出 forge/build/libs/queqiao_map_web-*.jar
+gradlew :forge:build -PmcTarget=1.20.1    &REM 指定版本覆盖层
 ```
 
 - Gradle wrapper 8.8（跑 Gradle 本身用 JDK 17–21；1.21.x 分支 toolchain 自动切 LibericaJDK-21）。
-- 元数据模板放 `<loader>/origin/src/main/templates/`，processResources 用 Ant ReplaceTokens（`@token@`）渲染；
+- 元数据模板放 `<loader>/src/main/templates/`，processResources 用 Ant ReplaceTokens（`@token@`）渲染；
   **禁用 filesMatching/expand/eachFile**——那类 DSL 产生 MatchingCopyAction，IDEA 资源模型解析不了会告警。
 - `gradle.properties` 按 ISO-8859-1 读取：中文值必须 `\\uXXXX` 转义（`mod_authors` 即此法），否则注入模板时双重编码。
-- 改动 origin 后可用 javac 秒级自检（不需要 MC）：
-  javac --release 17 -cp libs\queqiao-tool-0.6.8.jar -d out <origin 全部 .java>
+- 改动 common 后可用 javac 秒级自检（不需要 MC）：
+  javac --release 17 -cp libs\queqiao-tool-0.6.8.jar -d out <common 全部 .java>
   （Windows 路径含空格时用 argfile，argfile 内路径加引号并用正斜杠）。
 - 接/换鹊桥 API 前用 javap 核对签名，不凭记忆：
   javap -p -cp libs\queqiao-tool-0.6.8.jar com.github.theword.queqiao.tool.GlobalContext
@@ -118,8 +118,8 @@ JSON 字段名 = 单单词 camelCase 字段（Gson 反射直出，不受命名�
   适配器 register/unregister 生命周期、瓦片队列加锁、鹊桥缺席探针、重启维度基线清空；
   二轮——drain 发送失败出口防停服死循环、停服序「静默→排空」、4 个事件钩子 catch Throwable、
   isReady 探针 volatile、forge 侧 compileOnly 防御行；另实证驳回「addListener 必须 @SubscribeEvent」误报，见 §6）
-- M2 Fabric 1.20.1 ← 下一站（听用户调度）：写 fabric/origin/build.gradle（fabric-loom），放开 settings.gradle include，
-  核对 fabric 各版本覆盖层里的 TODO 版本号（fabric/origin 已有骨架源码未接入编译）
+- M2 Fabric 1.20.1 ← 下一站（听用户调度）：写 fabric/build.gradle（fabric-loom），放开 settings.gradle include，
+  核对 fabric 各版本覆盖层里的 TODO 版本号（fabric/ 已有骨架源码未接入编译）
 - M3 Forge 实战联调（runServer + 鹊桥 + 消费端按 INTEGRATION.md 收事件）。随办清单：
   GlobalContext.sendEvent 并发语义与「send=本地入队快操作」假设验证（队列锁内发调色板依赖它）；
   普通方块放置二级信号（EntityPlaceEvent 仅覆盖 BlockEntity，漏采靠 sha1 去重+区块事件兜底）；
@@ -131,6 +131,6 @@ JSON 字段名 = 单单词 camelCase 字段（Gson 反射直出，不受命名�
 
 ## 8. 代码风格
 
-Java 17 语法为上限（仅 1.21.x 分支可用 21）；origin 包零 MC import、零第三方（只用 JDK + 鹊桥接口）；
+Java 17 语法为上限（仅 1.21.x 分支可用 21）；common 包零 MC import、零第三方（只用 JDK + 鹊桥接口）；
 日志用 java.util.logging（各分支 Logger 名 = queqiao_map_web.<platform>）；注释中文、标识符英文。
 类命名采用功能命名（完整英文单词；主入口类名同步 modid = QueqiaoMapWeb），为 PR 必检项，规范见 CONTRIBUTING.md §1。

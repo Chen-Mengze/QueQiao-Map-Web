@@ -4,9 +4,9 @@ import net.yumezawa.queqiao_map_web.config.MapExtConfig;
 import net.yumezawa.queqiao_map_web.event.MapDimensionsEvent;
 import net.yumezawa.queqiao_map_web.event.PlayerMoveEvent;
 import net.yumezawa.queqiao_map_web.platform.PlatformAdapter;
-import net.yumezawa.queqiao_map_web.render.Palette;
+import net.yumezawa.queqiao_map_web.tile.Palette;
 import net.yumezawa.queqiao_map_web.sampler.PositionSampler;
-import net.yumezawa.queqiao_map_web.sampler.TileQueue;
+import net.yumezawa.queqiao_map_web.tile.TileQueue;
 import net.yumezawa.queqiao_map_web.sender.EventSink;
 import net.yumezawa.queqiao_map_web.sender.QueQiaoSink;
 

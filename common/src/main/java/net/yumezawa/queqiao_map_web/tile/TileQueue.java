@@ -1,4 +1,6 @@
-package net.yumezawa.queqiao_map_web.sampler;
+package net.yumezawa.queqiao_map_web.tile;
+
+import net.yumezawa.queqiao_map_web.tile.TopBlockRenderer.Sample;
 
 import net.yumezawa.queqiao_map_web.config.MapExtConfig;
 import net.yumezawa.queqiao_map_web.event.MapPaletteEvent;
@@ -6,9 +8,6 @@ import net.yumezawa.queqiao_map_web.event.MapTileEvent;
 import net.yumezawa.queqiao_map_web.model.TilePayloadModel;
 import net.yumezawa.queqiao_map_web.platform.PlatformAdapter;
 import net.yumezawa.queqiao_map_web.platform.PlatformAdapter.ChunkPos;
-import net.yumezawa.queqiao_map_web.render.Palette;
-import net.yumezawa.queqiao_map_web.render.TopBlockRenderer;
-import net.yumezawa.queqiao_map_web.render.TopBlockRenderer.Sample;
 import net.yumezawa.queqiao_map_web.sender.EventSink;
 
 import java.util.ArrayList;

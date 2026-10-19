@@ -18,7 +18,7 @@
 
 ## 1. 事实基础：不需要 Mixin，也不需要 fork
 
-以下均读自鹊桥 `main` 分支源码， **非推断**。
+以下均读自鹊桥 `main` 分支源码， **非推断**。例中 `fabric|forge|neoforge/origin/...` 是**鹊桥自己仓库**的目录布局（本仓库为对齐标准 mod 已改用 `common/` + 扁平 `<loader>/`，见 §2）。
 
 ### 1.1 鹊桥自己就是靠 `GlobalContext.sendEvent` 发事件的
 
@@ -101,12 +101,12 @@ public PlayerChatEvent(PlayerModel playerModel, String messageId, String rawMess
 
 ## 2. 工程结构（主结构 + 三平台多版本分支）
 
-采用 **混合多分支**：根目录一份公共 `origin/`，下面按加载器分三个平台分支，
+采用 **混合多分支**：根目录一份公共 `common/`，下面按加载器分三个平台分支，
 每个平台分支内再按 MC 版本分目录。与鹊桥自身的组织方式一致。
 
 ```
 QueQiao Map Web/
-├── origin/                              ← 主结构：与 MC 无关的公共业务实现
+├── common/                              ← 主结构：与 MC 无关的公共业务实现（多加载器标准目录名）
 │   └── src/main/java/net/yumezawa/queqiao_map_web
 │       ├── ModLifecycle.java                             生命周期与装配
 │       ├── config/MapExtConfig.java                开关 / 节流 / 批量参数（含 yml 极简解析）
@@ -119,53 +119,45 @@ QueQiao Map Web/
 │       ├── model/
 │       │   ├── PlayerPosModel.java                 含 dimension（补 PlayerModel 缺口）
 │       │   └── TilePayloadModel.java               cx/cz/size/format/sha1/b64
-│       ├── sampler/
-│       │   ├── PositionSampler.java                差分 + 节流 + last-value 合并
-│       │   └── TileQueue.java                      脏区块去重 + 批量刷写
-│       ├── render/
+│       ├── sampler/PositionSampler.java            玩家位置采样：差分 + 节流 + last-value 合并
+│       ├── tile/                                   瓦片功能集：刷写队列 + 调色板 + 编码
+│       │   ├── TileQueue.java                      脏区块去重 + 批量刷写
 │       │   ├── Palette.java                        共享 256 色，只发一次
 │       │   └── TopBlockRenderer.java               zlib + sha1 + base64 打包
 │       └── sender/
 │           ├── EventSink.java                      ★ 发送器抽象
 │           └── QueQiaoSink.java                    唯一实现：GlobalContext.sendEvent（鹊桥前置）
 │
-├── fabric/                              ← Fabric 分支：1.20.1 起
-│   ├── origin/                                     平台源码（唯一接触 MC 类的地方）
+├── fabric/                              ← Fabric 分支：1.20.1 起（M2；src/ 是唯一接触 MC 类的地方）
+│   ├── src/main/java/net/yumezawa/queqiao_map_web/fabric/
 │   │   ├── QueqiaoMapWeb.java                       入口：ModInitializer
-│   │   ├── platform/FabricPlatformAdapter.java
-│   │   └── resources/fabric.mod.json
-│   ├── fabric-1.20.1/gradle.properties
-│   ├── fabric-1.20.4/
-│   ├── fabric-1.21.1/
-│   ├── fabric-1.21.4/
-│   ├── fabric-1.21.5/
-│   ├── fabric-1.21.6/
-│   ├── fabric-1.21.9/
-│   └── fabric-1.21.11/
+│   │   └── platform/FabricPlatformAdapter.java
+│   ├── src/main/resources/fabric.mod.json
+│   └── versions/<ver>/gradle.properties             1.20.1 … 1.21.11，每版本一目录
 │
 ├── forge/                               ← Forge 分支：仅 1.20.1
-│   ├── origin/
-│   │   ├── QueqiaoMapWeb.java                        入口：@Mod + MinecraftForge.EVENT_BUS
-│   │   ├── platform/ForgePlatformAdapter.java
-│   │   └── resources/META-INF/mods.toml
-│   └── forge-1.20.1/gradle.properties
+│   ├── build.gradle                                 ForgeGradle 6 构建（工程 ':forge'）
+│   ├── src/main/java/net/yumezawa/queqiao_map_web/forge/
+│   │   ├── QueqiaoMapWeb.java                       入口：@Mod + MinecraftForge.EVENT_BUS
+│   │   └── platform/ForgePlatformAdapter.java
+│   ├── src/main/templates/META-INF/mods.toml        （与 pack.mcmeta，ReplaceTokens 渲染）
+│   └── versions/1.20.1/gradle.properties
 │
-└── neoforge/                            ← NeoForge 分支：1.21.1 起
-    ├── origin/
-    │   ├── QueqiaoMapWeb.java                     入口：@Mod + NeoForge.EVENT_BUS
-    │   ├── platform/NeoForgePlatformAdapter.java
-    │   └── templates/META-INF/neoforge.mods.toml
-    ├── neoforge-1.21.1/gradle.properties
-    └── neoforge-26.1/gradle.properties             ⚠️ neo_version 待按官方矩阵填
-
+└── neoforge/                            ← NeoForge 分支：1.21.1 起（M4）
+    ├── src/main/java/net/yumezawa/queqiao_map_web/neoforge/
+    │   ├── QueqiaoMapWeb.java                       入口：@Mod + NeoForge.EVENT_BUS
+    │   └── platform/NeoForgePlatformAdapter.java
+    ├── src/main/templates/META-INF/neoforge.mods.toml
+    ├── versions/1.21.1/gradle.properties
+    └── versions/26.1/gradle.properties              ⚠️ neo_version 待按官方矩阵填
 ```
 
 ### 2.1 为什么这样分层
 
-`origin/`（主结构）里 **不出现任何 `net.minecraft.*` 类**；所有游戏侧访问收敛到
-`PlatformAdapter` 接口，由 `fabric/origin`、`forge/origin`、`neoforge/origin` 各实现一份。
+`common/`（主结构）里 **不出现任何 `net.minecraft.*` 类**；所有游戏侧访问收敛到
+`PlatformAdapter` 接口，由 `fabric/`、`forge/`、`neoforge/` 各实现一份。
 
-- **加 MC 版本** = 加一个 `gradle.properties` 目录（版本差异大时才在平台 origin 里加条件块）
+- **加 MC 版本** = 加一个 `versions/<ver>/` 目录（仅 gradle.properties）（版本差异大时才在平台 src 里加条件块）
 - **加加载器** = 加一个平台分支 + 一个适配器实现类
 - **鹊桥重构 `sendEvent`** = 换一个 `EventSink` 实现
 
@@ -174,7 +166,7 @@ QueQiao Map Web/
 ### 2.2 版本目录里放什么
 
 版本目录原则上 **只有 `gradle.properties`**（MC 版本、映射、loader、Java 版本）。
-源码共用平台 `origin/`，由构建工具按条件编译块生成各版本源码。
+源码共用平台 `common/`，由构建工具按条件编译块生成各版本源码。
 
 只有当某个版本的 API 差异无法用条件块表达时，才在该版本目录下放覆盖文件。
 
@@ -216,7 +208,7 @@ public interface PlatformAdapter {
 ```
 
 > 注意：`renderChunk(String dimension, ChunkPos)` 用 dimension 字符串作键，内部由平台实现自行 `getLevel(dimension)`，避免
-> origin 持有 `Level` 对象。
+> common 持有 `Level` 对象。
 
 ---
 

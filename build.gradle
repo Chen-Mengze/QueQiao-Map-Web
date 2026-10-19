@@ -1,5 +1,5 @@
 // 伞形构建：真正的构建逻辑在各子项目里。
-//   :origin          —— 主结构（无 MC 依赖）
-//   :forge:origin    —— Forge 分支（版本由 forge/forge-<ver>/gradle.properties 决定）
+//   :common          —— 主结构（无 MC 依赖）
+//   :forge           —— Forge 分支（版本由 forge/versions/<ver>/gradle.properties 决定）
 // 版本只影响配置，不影响业务代码：加 MC 版本 = 加一个版本目录（只有 gradle.properties）。
-// 构建指定版本：gradlew :forge:origin:build -PmcTarget=1.20.1
+// 构建指定版本：gradlew :forge:build -PmcTarget=1.20.1

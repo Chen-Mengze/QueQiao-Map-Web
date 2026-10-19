@@ -13,8 +13,8 @@
 | event/ | PlayerMoveEvent / MapTileEvent / MapPaletteEvent / MapDimensionsEvent | 四个上报事件（extends BaseEvent） |
 | model/ | PlayerPosModel / TilePayloadModel | Gson DTO（字段名单单词，反射直出） |
 | platform/ | PlatformAdapter（接口）；实现 = <加载器>PlatformAdapter（ForgePlatformAdapter…） | 加载器差异抹平 |
-| render/ | Palette / TopBlockRenderer | 调色板冻结 / 顶方块瓦片编码 |
-| sampler/ | PositionSampler / TileQueue | 位置差分采样 / 瓦片渲染队列 |
+| tile/ | TileQueue / Palette / TopBlockRenderer | 瓦片功能集：脏区块刷写队列 / 调色板冻结 / 瓦片编码 |
+| sampler/ | PositionSampler | 玩家位置差分采样（瓦片队列在 tile/） |
 | sender/ | EventSink（接口）/ QueQiaoSink | 发送抽象与鹊桥实现（GlobalContext 只许出现在 QueQiaoSink.java） |
 | 各加载器分支根 | **QueqiaoMapWeb**（三加载器同名、包隔离） | 主入口类名 = modid（queqiao_map_web）的 PascalCase |
 
@@ -27,10 +27,12 @@
 
 历史映射（命名演变 2026-10 两轮：功能命名 →（fbaa536）三段式 →（本次）功能命名+modid 入口）：MapWeb→QmwLifecycle→ModLifecycle；MapExtConfig→CfgMapExt→MapExtConfig；PlatformAdapter→PlatAdapter→PlatformAdapter；PlayerMoveEvent→EvtPlayerMove→PlayerMoveEvent；MapTileEvent→EvtMapTile→MapTileEvent；MapPaletteEvent→EvtMapPalette→MapPaletteEvent；MapDimensionsEvent→EvtMapDimensions→MapDimensionsEvent；PlayerPosModel→MdlPlayerPos→PlayerPosModel；TilePayloadModel→MdlTilePayload→TilePayloadModel；Palette→RndPalette→Palette；TopBlockRenderer→RndTopBlock→TopBlockRenderer；PositionSampler→SmpPosition→PositionSampler；TileQueue→SmpTileQueue→TileQueue；EventSink→SndEvent→EventSink；QueQiaoSink→SndQueQiao→QueQiaoSink；MapWebForge→ForgeEntry→QueqiaoMapWeb；MapWebFabric→FabricEntry→QueqiaoMapWeb；MapWebNeoForge→NeoForgeEntry→QueqiaoMapWeb；ForgePlatformAdapter→PlatForgeAdapter→ForgePlatformAdapter；FabricPlatformAdapter→PlatFabricAdapter→FabricPlatformAdapter；NeoForgePlatformAdapter→PlatNeoForgeAdapter→NeoForgePlatformAdapter。
 
+目录演变（2026-10 本轮，对齐标准 mod 布局）：`origin/`→`common/`（多加载器标准主结构目录）；`<loader>/origin/`→`<loader>/`（去嵌套扁平化）；版本覆盖层 `<loader>/<loader>-<ver>/`→`<loader>/versions/<ver>/`；`render/`→`tile/`（并入 `TileQueue`），`sampler/` 仅剩 `PositionSampler`；neoforge 模板归位 `src/main/templates/`。
+
 ## 2. PR 验收清单
 
-1. 构建绿：set JAVA_HOME=C:\Program Files\BellSoft\LibericaJDK-17-Full && gradlew :origin:build :forge:origin:build。
-2. origin 改动跑 javac 秒级自检（命令见 AGENT.md §3），不引入 net.minecraft.* 与第三方 import。
+1. 构建绿：set JAVA_HOME=C:\Program Files\BellSoft\LibericaJDK-17-Full && gradlew :common:build :forge:build。
+2. common 改动跑 javac 秒级自检（命令见 AGENT.md §3），不引入 net.minecraft.* 与第三方 import。
 3. 类名符合功能命名（本文件 §1 表），改名后旧类名零残留（rg \b旧名\b，含 eventName 字面量与 fabric.mod.json 入口）。
 4. 协议铁律：sub_type 与既有字段语义不变、字段只加不改（docs/INTEGRATION.md §7）；DTO 不手写鹊桥自动字段。
 5. 发送铁律不破坏：见 AGENT.md §4（零注册零 Mixin、未就绪完全静默、GlobalContext 只出现在 sender/QueQiaoSink.java）。

@@ -19,7 +19,7 @@ tasks.withType(JavaCompile).configureEach {
 
 // ---- 版本覆盖层：forge-<ver>/ 里只有 gradle.properties（MC 版本 / 映射 / Java 版本）----
 def mcTarget = (findProperty('mcTarget') ?: '1.20.1').toString()
-def overlayFile = new File(rootDir, "forge/forge-${mcTarget}/gradle.properties")
+def overlayFile = new File(rootDir, "forge/versions/${mcTarget}/gradle.properties")
 def overlay = new Properties()
 overlayFile.withInputStream { overlay.load(it) }
 def P = { String k -> overlay.getProperty(k) }
@@ -43,19 +43,19 @@ minecraft {
 
 dependencies {
     minecraft "net.minecraftforge:forge:${P('minecraft_version')}-${P('forge_version')}"
-    implementation project(':origin')
-    // 与 origin/build.gradle 同款防御：不依赖「forge 侧签名暂不暴露鹊桥类型」的巧合，
+    implementation project(':common')
+    // 与 common/build.gradle 同款防御：不依赖「forge 侧签名暂不暴露鹊桥类型」的巧合，
     // compileOnly 显式声明编译期接口（运行期由鹊桥本体提供，绝不进 jar）
     compileOnly files("${rootDir}/libs/queqiao-tool-0.6.8.jar")
 }
 
-// 主结构类直接并进 mod jar：:origin 无任何 net.minecraft 引用，reobf 不会碰它，
+// 主结构类直接并进 mod jar：:common 无任何 net.minecraft 引用，reobf 不会碰它，
 // 不引 shadow（FG6 + shadow 的 reobf 组合维护成本高）。
-evaluationDependsOn(':origin')
+evaluationDependsOn(':common')
 jar {
     archiveFileName = "${mod_id}-${version}.jar"
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
-    from project(':origin').sourceSets.main.output
+    from project(':common').sourceSets.main.output
     manifest {
         attributes([
                 'Minecraft-Mod'    : 'true',
