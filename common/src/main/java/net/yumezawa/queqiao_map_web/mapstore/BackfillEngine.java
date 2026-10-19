@@ -22,8 +22,8 @@ import java.util.regex.Pattern;
  * 拼成 512×512 RGB24 后一次 {@link MapStore#putRegion}。</p>
  *
  * <p>节流：令牌桶，构造器参数 maxChunksPerSec（MapExtConfig 默认 512，下限 clamp 由 config 层负责，
- * 本类只把 &lt;=0 兜底为 1）。一切异常吞掉记 FINE；stop() 置位 + interrupt，由 ModLifecycle 在
- * streamer 停止之后、adapter.shutdown 之前调用。</p>
+ * 本类只把 &lt;=0 兜底为 1）。一切异常吞掉记 FINE；stop() 置位 + interrupt，由 ModLifecycle.stop() 在
+ * streamer 停止之后调用（adapter.shutdown 已由加载器入口先行，见 REQ-MS-008）。</p>
  */
 public final class BackfillEngine {
 
