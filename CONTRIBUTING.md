@@ -25,13 +25,9 @@
 - 新目录/新加载器：类名直接取功能角色名；新加载器入口同样命名 QueqiaoMapWeb（包隔离）。
 - 协议铁律：`sub_type` 与 DTO 字段名**永不**随重命名改动；BaseEvent 构造器 eventName 字面量 = 类名，随类名同步（Web 端只按 sub_type 路由，见 docs/INTEGRATION.md §2；改名须同步 ARCHITECTURE.md §4 示例 JSON）。
 
-历史映射（命名演变 2026-10 两轮：功能命名 →（fbaa536）三段式 →（本次）功能命名+modid 入口）：MapWeb→QmwLifecycle→ModLifecycle；MapExtConfig→CfgMapExt→MapExtConfig；PlatformAdapter→PlatAdapter→PlatformAdapter；PlayerMoveEvent→EvtPlayerMove→PlayerMoveEvent；MapTileEvent→EvtMapTile→MapTileEvent；MapPaletteEvent→EvtMapPalette→MapPaletteEvent；MapDimensionsEvent→EvtMapDimensions→MapDimensionsEvent；PlayerPosModel→MdlPlayerPos→PlayerPosModel；TilePayloadModel→MdlTilePayload→TilePayloadModel；Palette→RndPalette→Palette；TopBlockRenderer→RndTopBlock→TopBlockRenderer；PositionSampler→SmpPosition→PositionSampler；TileQueue→SmpTileQueue→TileQueue；EventSink→SndEvent→EventSink；QueQiaoSink→SndQueQiao→QueQiaoSink；MapWebForge→ForgeEntry→QueqiaoMapWeb；MapWebFabric→FabricEntry→QueqiaoMapWeb；MapWebNeoForge→NeoForgeEntry→QueqiaoMapWeb；ForgePlatformAdapter→PlatForgeAdapter→ForgePlatformAdapter；FabricPlatformAdapter→PlatFabricAdapter→FabricPlatformAdapter；NeoForgePlatformAdapter→PlatNeoForgeAdapter→NeoForgePlatformAdapter。
-
-目录演变（2026-10 本轮，对齐标准 mod 布局）：`origin/`→`common/`（多加载器标准主结构目录）；`<loader>/origin/`→`<loader>/`（去嵌套扁平化）；版本覆盖层 `<loader>/<loader>-<ver>/`→`<loader>/versions/<ver>/`；`render/`→`tile/`（并入 `TileQueue`），`sampler/` 仅剩 `PositionSampler`；neoforge 模板归位 `src/main/templates/`。
-
 ## 2. PR 验收清单
 
-1. 构建绿：set JAVA_HOME=C:\Program Files\BellSoft\LibericaJDK-17-Full && gradlew :common:build :forge:build。
+1. 构建绿：按 README「构建」节命令执行 `gradlew :common:build :forge:build`（JDK 17+，版本由 toolchain 自动匹配）。
 2. common 改动跑 javac 秒级自检（命令见 AGENT.md §3），不引入 net.minecraft.* 与第三方 import。
 3. 类名符合功能命名（本文件 §1 表），改名后旧类名零残留（rg \b旧名\b，含 eventName 字面量与 fabric.mod.json 入口）。
 4. 协议铁律：sub_type 与既有字段语义不变、字段只加不改（docs/INTEGRATION.md §7）；DTO 不手写鹊桥自动字段。

@@ -29,11 +29,15 @@ enabled: true
 
 ## 加载器与版本支持
 
-| 加载器 | 版本 | 状态 |
+版本支持是数据不是代码：每个分支的全部受支持 MC 版本列在 `<loader>/versions/` 下，每个版本目录只有一个 `gradle.properties`（MC/加载器版本、映射、Java 版本的唯一真相）；是否已接入编译以 [settings.gradle](settings.gradle) 的 `include` 为准。
+
+| 加载器 | 版本清单（唯一真相） | 编译接入 |
 |---|---|---|
-| Forge | 1.20.1 | ✅ 编译通过并产出 mod jar（M1，reobf 完成） |
-| Fabric | 1.20.1 – 1.21.11 | 骨架已就位，待接入编译（M2/M3） |
-| NeoForge | 1.21.1 / 26.1 | 骨架已就位（M4） |
+| Forge | `forge/versions/` | 已接入，产出 mod jar（reobf 完成） |
+| Fabric | `fabric/versions/` | 未接入，骨架已就位（M2/M3） |
+| NeoForge | `neoforge/versions/` | 未接入，骨架已就位（M4） |
+
+当前具体支持哪些 MC 版本：直接查看上述版本目录列表，无需改任何业务代码。
 
 ## 项目结构
 
@@ -53,12 +57,21 @@ queqiao_map_web/
 
 ## 构建
 
+仓库自带 Gradle Wrapper，本机只需 JDK 17+ 启动环境；实际编译用的 Java 版本由 Gradle toolchain 按各版本目录的 `java_version` 自动匹配，无需手动指定 `JAVA_HOME`。
+
 ```bat
-set JAVA_HOME=C:\Program Files\BellSoft\LibericaJDK-17-Full
-gradlew.bat :common:build :forge:build -PmcTarget=1.20.1
+:: Windows
+gradlew.bat :common:build :forge:build
 ```
 
-产出 `forge/build/libs/queqiao_map_web-*.jar`。Gradle 已配置国内镜像（腾讯 gradle 发行 / 阿里云插件 / forge 官方 maven），无需代理。
+```sh
+# Linux / macOS
+./gradlew :common:build :forge:build
+```
+
+构建指定 MC 版本加 `-PmcTarget=<MC版本>`（对应 `<loader>/versions/<MC版本>/`；省略时用 `forge/build.gradle` 声明的默认值）。产物统一位于 `<loader>/build/libs/<mod_id>-<mod版本>+mc<MC版本>.jar`。Gradle 发行与依赖仓库均已配置国内镜像（腾讯 gradle 发行 / 阿里云插件 / forge 官方 maven），本地直连即可，无需代理。
+
+正式发布走 CI/CD：推送 `v*` 标签触发 GitHub Actions，自动构建 `forge/versions/` 下全部 MC 版本并发布 GitHub Release（见 [.github/workflows/release.yml](.github/workflows/release.yml)）。
 
 ## 文档
 
