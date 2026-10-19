@@ -21,6 +21,7 @@ common/                 主结构：无任何 net.minecraft.* 引用
     sampler/                       PositionSampler（仅玩家位置采样）
     tile/                          TileQueue / Palette / TopBlockRenderer（瓦片功能集）
     sender/                        EventSink / QueQiaoSink（唯一通道，鹊桥前置）
+  src/test/java/               JUnit5 测试：每方法 @Tag("REQ-XXX-NNN")；冒烟类 *SmokeTest + @Tag("smoke")
 forge/
   src/                             Forge 入口 + ForgePlatformAdapter + src/main/templates（该分支唯一碰 MC 类的地方）
   versions/1.20.1/gradle.properties 版本覆盖层（MC 版本/映射/Java 版本唯一真相）
@@ -31,6 +32,7 @@ neoforge/
   src/                             NeoForge 入口 + NeoForgePlatformAdapter + src/main/templates（M4）
   versions/1.21.1/  versions/26.1/ 版本覆盖层
 libs/queqiao-tool-0.6.8.jar        compileOnly 鹊桥接口（运行期由鹊桥本体提供，绝不 shade）
+specs/                             行为规格（SDD 唯一契约源）：<域>/spec.md，「### REQ-<域>-NNN」条目（见 specs/README.md）
 ```
 
 三条演化规则：**加 MC 版本 = 只加一个版本目录（仅 gradle.properties）**；加加载器 = 一个平台分支目录 + 一个适配器；
@@ -57,6 +59,16 @@ gradlew :forge:build -PmcTarget=1.20.1    &REM 指定版本覆盖层
   已验证（2026-10）：GlobalContext.sendEvent(BaseEvent) 存在；
   BaseEvent 三参构造器 (String eventName, String postType, String subType)；
   getConfig() 在鹊桥 init 前返回 null —— QueQiaoSink.isReady() 用它做就绪探针（2s 节流）。
+
+### 测试与规格
+
+```bat
+gradlew :common:test      &REM JUnit5 单元 + 冒烟测试（common/src/test）
+```
+
+- 测试放 `common/src/test/java/`（镜像包路径）；每个方法 `@Tag("REQ-XXX-NNN")` 绑定 `specs/` 中的 REQ；冒烟类命名 `*SmokeTest` + `@Tag("smoke")`。
+- `specs/` 为行为唯一真相：行为以规格为准，测试按 REQ id 绑定规格（SDD+TDD 流程见 CONTRIBUTING.md §3；CI spec-coverage 双向校验 REQ↔@Tag）。
+- javac 秒级自检（上方）保留为改动 common 后的快速编译检查，不能替代 `:common:test`。
 
 ## 4. 发送铁律（所有平台共同遵守）
 

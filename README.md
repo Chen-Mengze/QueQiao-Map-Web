@@ -73,6 +73,8 @@ gradlew.bat :common:build :forge:build
 
 正式发布走 CI/CD：推送 `v*` 标签触发 GitHub Actions，自动构建 `forge/versions/` 下全部 MC 版本并发布 GitHub Release（见 [.github/workflows/release.yml](.github/workflows/release.yml)）。
 
+本地测试：`gradlew :common:test`（JUnit5，位于 `common/src/test`；每个测试方法带 `@Tag("REQ-XXX-NNN")` 绑定 [`specs/`](specs/README.md) 中的行为 REQ——`specs/` 是行为规格的唯一契约源）。PR 的 CI 门禁 = 测试 + 架构守卫 + jar 冒烟 + 规格覆盖双向校验（见 [.github/workflows/ci.yml](.github/workflows/ci.yml)）。
+
 ## 文档
 
 - [ARCHITECTURE.md](ARCHITECTURE.md) —— 设计权威：事实基础、协议契约、带宽实测、风险与里程碑。
