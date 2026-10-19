@@ -40,7 +40,7 @@ libs/queqiao-tool-0.6.8.jar        compileOnly 鹊桥接口（运行期由鹊桥
 
 ```bat
 set JAVA_HOME=C:\Program Files\BellSoft\LibericaJDK-17-Full   &REM Forge 1.20.1 用 JDK 17
-gradlew :common:build :forge:build                &REM 产出 forge/build/libs/queqiao_map_web-*.jar
+gradlew :common:build :forge:build                &REM 产出 forge/build/libs/queqiao_map_web-forge-*.jar
 gradlew :forge:build -PmcTarget=1.20.1    &REM 指定版本覆盖层
 ```
 

@@ -26,7 +26,10 @@ def P = { String k -> overlay.getProperty(k) }
 
 group = mod_group_id
 version = "${mod_version}+mc${P('minecraft_version')}"
-archivesBaseName = mod_id
+// 产物文件名带适配加载器标注：<modid>-<加载器>-<mod版本>+mc<MC版本>.jar；
+// 加载器名取模块名（forge/fabric/neoforge），克隆同构结构即自动获得正确标注
+def loaderName = project.name
+archivesBaseName = "${mod_id}-${loaderName}"
 
 java {
     toolchain {
@@ -53,7 +56,7 @@ dependencies {
 // 不引 shadow（FG6 + shadow 的 reobf 组合维护成本高）。
 evaluationDependsOn(':common')
 jar {
-    archiveFileName = "${mod_id}-${version}.jar"
+    archiveFileName = "${archivesBaseName}-${version}.jar"
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
     from project(':common').sourceSets.main.output
     manifest {

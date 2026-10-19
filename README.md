@@ -20,7 +20,7 @@ Minecraft 服务端 mod：把「顶层方块地图瓦片 + 玩家位置」以事
 ## 前置与快速开始
 
 1. 服务端已安装鹊桥 QueQiao Tool（本 mod 是其附属扩展，鹊桥是唯一通道；未安装时本 mod 整体不启动）。
-2. 将 `queqiao_map_web-<版本>+mc<MC版本>.jar` 放入服务端 `mods/`。
+2. 将 `queqiao_map_web-<加载器>-<版本>+mc<MC版本>.jar`（文件名自带适配加载器标注，如 `queqiao_map_web-forge-0.0.1+mc1.20.1.jar`）放入服务端 `mods/`。
 3. 编辑服务端 `config/queqiao-mapext.yml` 开启：
 
 ```yml
@@ -69,7 +69,7 @@ gradlew.bat :common:build :forge:build
 ./gradlew :common:build :forge:build
 ```
 
-构建指定 MC 版本加 `-PmcTarget=<MC版本>`（对应 `<loader>/versions/<MC版本>/`；省略时用 `forge/build.gradle` 声明的默认值）。产物统一位于 `<loader>/build/libs/<mod_id>-<mod版本>+mc<MC版本>.jar`。Gradle 发行与依赖仓库均已配置国内镜像（腾讯 gradle 发行 / 阿里云插件 / forge 官方 maven），本地直连即可，无需代理。
+构建指定 MC 版本加 `-PmcTarget=<MC版本>`（对应 `<loader>/versions/<MC版本>/`；省略时用 `forge/build.gradle` 声明的默认值）。产物统一位于 `<loader>/build/libs/<mod_id>-<加载器>-<mod版本>+mc<MC版本>.jar`（文件名自带适配加载器标注）。Gradle 发行与依赖仓库均已配置国内镜像（腾讯 gradle 发行 / 阿里云插件 / forge 官方 maven），本地直连即可，无需代理。
 
 正式发布走 CI/CD：推送 `v*` 标签触发 GitHub Actions，自动构建 `forge/versions/` 下全部 MC 版本并发布 GitHub Release（见 [.github/workflows/release.yml](.github/workflows/release.yml)）。
 
