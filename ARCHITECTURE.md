@@ -477,16 +477,17 @@ async def handle_mc_message(self, raw):
 
 ---
 
-## 8. 里程碑
+## 8. 里程碑（TDD+SDD 阶段制）
 
-| 阶段 | 内容                                      | 验收                                  |
-|------|-------------------------------------------|---------------------------------------|
-| M1   | Forge 1.20.1 骨架 + 编译链（国内镜像）    | mod jar 产出、reobf 完成 ✅           |
-| M2   | Fabric 1.20.1（fabric-loom）+ 位置事件    | 后端收到含 dimension 的 `player_move` |
-| M3   | 实战联调（runServer + 鹊桥 + 消费端）     | 按 `INTEGRATION.md` 解析出地图与位置  |
-| M4   | NeoForge 1.21.1 / 26.1 适配层             | 同 M2/M3                              |
-| M5   | 开放接入层：契约冻结 + `docs/INTEGRATION.md`（接入说明与解析解释） | 第三方（含 owner 自有项目）照文档独立收全 5 事件 |
-| M6   | 开源                                      | README + 协议 spec + 三平台构建       |
+任何新行为先在 `specs/` 立 REQ（SDD），再按 REQ「验证：」行先写 `@Tag` 红灯测试（TDD），实现转绿后重构，再过门禁。
+CI/CD 暂停中（workflow 移入 `.github/workflows.disabled/`），门禁本地跑同样四项：`:common:test` + 架构守卫 + jar 冒烟 + spec-coverage 双向映射。
+
+| 阶段 | 内容 | 验收（SDD ⇄ TDD） |
+|------|------------------------------------------|--------------------------------------------------|
+| 阶段一 ✅ | 核心数据链路：Forge 1.20.1 编译链 + 瓦片链路 + mapstore/map_region（mca→.qms→区域流、xor 续传） | specs 八域 REQ 立制；62/62 @Tag 测试绿；jar + reobf（311b4cb） |
+| 阶段二 ← 当前 | 接口契约与三方接入固化：五事件字段基线冻结（只增）、格式令牌语义冻结、INTEGRATION §1–§9 即对外契约 | 本地四项门禁全绿 + REQ↔@Tag 双向覆盖空 diff；第三方（含 owner 自有项目）按 §9.2 端到端解析全 5 个 sub_type、xor 跨重启续传、调色板落盘 |
+| 阶段三 | 多平台扩展：Fabric 1.20.1 接入编译、NeoForge 1.21.1 / 26.1 适配层 | 平台特有行为先进 specs 立 REQ；适配器契约场景（5 事件/维度 registry key/worldSaveRoot）每平台跑通同一组 REQ |
+| 阶段四 | 开源与 CI/CD 恢复：LICENSE、README 终稿、workflow 复位、新标签重发 Release | 本地门禁全绿 → CI 恢复后全绿；新 Release 取代已撤回的 v0.0.1 |
 
 ---
 

@@ -43,4 +43,4 @@
 1. **规格先行**：先在对应 `specs/<域>/spec.md` 立/改 REQ（模板 `specs/TEMPLATE.md`），评审通过再动代码。REQ id 永不复用；语义变更开新 REQ 并把旧 REQ 标记废弃（specs/README.md）。
 2. **测试先行（红）**：按 REQ 在 `common/src/test` 写测试（方法 `@Tag("REQ id")`，冒烟类 `*SmokeTest` + `@Tag("smoke")`），确认其针对未实现行为失败。
 3. **实现（绿）**：实现让测试通过，再重构；`gradlew :common:test` 与 javac 秒级自检（AGENT.md §3）保持绿。
-4. **CI 门禁**：.github 全绿——测试 + 架构守卫（GlobalContext 仅在 QueQiaoSink、common 零 MC/第三方 import）+ jar 冒烟（token 渲染 / 不 shade / manifest / 产物命名）+ spec-coverage 双向映射（见 `.github/workflows/ci.yml`）。
+4. **CI 门禁**：测试 + 架构守卫 + jar 冒烟 + spec-coverage 双向映射全绿才可合并。CI/CD 当前暂停（workflow 位于 [.github/workflows.disabled/](../.github/workflows.disabled/)），四项门禁改为本地手动执行，CI 恢复后由 workflow 接管。

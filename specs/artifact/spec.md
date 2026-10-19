@@ -10,7 +10,7 @@
 - 给定 `:forge:build` 产物，当解压读取 META-INF/mods.toml，那么 modId 字段值 = mod_id（queqiao_map_web），全文无 `@[a-z_]+@` 匹配。
 - 给定 pack.mcmeta，那么 pack_format 数字 = 版本覆盖层 `pack_format_number`。
 
-**验证**：`ArtifactSmokeTest#tokensFullyRendered`（CI jar 冒烟步骤，[.github/workflows/ci.yml](../../.github/workflows/ci.yml)：unzip + grep 断言）
+**验证**：`ArtifactSmokeTest#tokensFullyRendered`（CI jar 冒烟步骤，现位于 [.github/workflows.disabled/ci.yml](../../.github/workflows.disabled/ci.yml)：unzip + grep 断言；CI/CD 暂停期间本地手动执行同一组断言）
 
 ### REQ-ART-002 jar 含 common 类、绝不含 com.github.theword（不 shade）
 

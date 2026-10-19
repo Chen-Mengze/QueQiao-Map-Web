@@ -35,8 +35,8 @@ enabled: true
 | 加载器 | 版本清单（唯一真相） | 编译接入 |
 |---|---|---|
 | Forge | `forge/versions/` | 已接入，产出 mod jar（reobf 完成） |
-| Fabric | `fabric/versions/` | 未接入，骨架已就位（M2/M3） |
-| NeoForge | `neoforge/versions/` | 未接入，骨架已就位（M4） |
+| Fabric | `fabric/versions/` | 未接入，骨架已就位（阶段三） |
+| NeoForge | `neoforge/versions/` | 未接入，骨架已就位（阶段三） |
 
 当前具体支持哪些 MC 版本：直接查看上述版本目录列表，无需改任何业务代码。
 
@@ -47,7 +47,7 @@ queqiao_map_web/
 ├── common/        主结构（多加载器标准目录名）：采样 / 瓦片队列 / 调色板 / 编码 / 二维地图库 / 发送，零 net.minecraft.* 引用
 ├── forge/         Forge 分支：入口 QueqiaoMapWeb + ForgePlatformAdapter（分支内唯一接触 MC 类处）
 │   └── versions/  每 MC 版本一个目录，只放 gradle.properties（版本/映射/Java 唯一真相）
-├── fabric/        Fabric 分支（同构，M2）
+├── fabric/        Fabric 分支（同构，阶段三接入）
 └── neoforge/      NeoForge 分支（同构，M4）
 ```
 
@@ -64,7 +64,7 @@ queqiao_map_web/
 - 环境变量（与鹊桥官方构建同名）：`setx GH_USERNAME "<GitHub用户名>"`、`setx PACKAGE_READ_ONLY_TOKEN "<PAT>"`（PAT 只勾 `read:packages`；重开终端生效）；
 - 或 `~/.gradle/gradle.properties` 写 `gpr.user=<GitHub用户名>`、`gpr.key=<PAT>`。
 
-CI 零配置：workflow 已注入 `GITHUB_TOKEN`。
+CI/CD 暂停中：workflow 已移入 `.github/workflows.disabled/`（GitHub Actions 不再触发，原因与恢复步骤见 [.github/workflows.disabled/README.md](.github/workflows.disabled/README.md)）。
 
 ```bat
 :: Windows
@@ -78,9 +78,9 @@ gradlew.bat :common:build :forge:build
 
 构建指定 MC 版本加 `-PmcTarget=<MC版本>`（对应 `<loader>/versions/<MC版本>/`；省略时用 `forge/build.gradle` 声明的默认值）。产物统一位于 `<loader>/build/libs/<mod_id>-<加载器>-<mod版本>+mc<MC版本>.jar`（文件名自带适配加载器标注）。Gradle 发行与依赖仓库均已配置国内镜像（腾讯 gradle 发行 / 阿里云插件 / forge 官方 maven），本地直连即可，无需代理。
 
-正式发布走 CI/CD：推送 `v*` 标签触发 GitHub Actions，自动构建 `forge/versions/` 下全部 MC 版本并发布 GitHub Release（见 [.github/workflows/release.yml](.github/workflows/release.yml)）。
+发布：CI/CD 恢复后推送 `v*` 标签，由 GitHub Actions 自动构建 `forge/versions/` 下全部 MC 版本并发布 GitHub Release（原 [.github/workflows/release.yml](.github/workflows/release.yml) 现位于 `.github/workflows.disabled/release.yml`）。
 
-本地测试：`gradlew :common:test`（JUnit5，位于 `common/src/test`；每个测试方法带 `@Tag("REQ-XXX-NNN")` 绑定 [`specs/`](specs/README.md) 中的行为 REQ——`specs/` 是行为规格的唯一契约源）。PR 的 CI 门禁 = 测试 + 架构守卫 + jar 冒烟 + 规格覆盖双向校验（见 [.github/workflows/ci.yml](.github/workflows/ci.yml)）。
+本地测试：`gradlew :common:test`（JUnit5，位于 `common/src/test`；每个测试方法带 `@Tag("REQ-XXX-NNN")` 绑定 [`specs/`](specs/README.md) 中的行为 REQ——`specs/` 是行为规格的唯一契约源）。合并门禁（当前在本地执行，CI 恢复后由 workflow 接管）= 测试 + 架构守卫 + jar 冒烟 + 规格覆盖双向校验（workflow 现位于 `.github/workflows.disabled/ci.yml`）。
 
 ## 文档
 

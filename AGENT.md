@@ -6,7 +6,7 @@
 
 把 Minecraft 服务端的「顶层方块地图 + 玩家位置」以事件形式经 **鹊桥（QueQiao）事件桥**
 推给 Web 地图。多加载器（Fabric / Forge / NeoForge）多版本，一套主结构。
-当前里程碑：mapstore + map_region（mca→本地二维地图库→区域流，实现进行中，见 §7）；此前 M1 = Forge 1.20.1 骨架 ✅（编译通过、jar 产出、reobf 完成、审计修复落地）。
+当前阶段：阶段二 = 接口契约与三方接入固化（TDD+SDD 阶段制里程碑见 §7；CI/CD 暂停，门禁转本地）。阶段一（核心数据链路：Forge 1.20.1 骨架 + mapstore/map_region）已完成 ✅（jar 产出、reobf 完成、审计修复落地、311b4cb）。
 
 ## 2. 仓库结构（已按此搭建）
 
@@ -27,7 +27,7 @@ forge/
   src/                             Forge 入口 + ForgePlatformAdapter + src/main/templates（该分支唯一碰 MC 类的地方）
   versions/1.20.1/gradle.properties 版本覆盖层（MC 版本/映射/Java 版本唯一真相）
 fabric/
-  src/                             Fabric 入口 + FabricPlatformAdapter + fabric.mod.json（M2 接入编译）
+  src/                             Fabric 入口 + FabricPlatformAdapter + fabric.mod.json（阶段三接入编译）
   versions/<ver>/gradle.properties 1.20.1 … 1.21.11（TODO 值接入编译前按官方矩阵核对）
 neoforge/
   src/                             NeoForge 入口 + NeoForgePlatformAdapter + src/main/templates（M4）
@@ -133,25 +133,25 @@ JSON 字段名 = 单单词 camelCase 字段（Gson 反射直出，不受命名�
 
 > 命名基线：主入口类 QueqiaoMapWeb（三个加载器同名、包隔离，类名同步 modid）；装配核心 ModLifecycle；mod id 统一 queqiao_map_web（与包名、gradle.properties、mods.toml 一致）；Fabric 元数据是 fabric.mod.json；全工程 **无 Mixin**；鹊桥 API 使用前必须 javap 核对（见 §3）。
 
-## 7. 里程碑
+## 7. 里程碑（TDD+SDD 阶段制）
 
-- M1 Forge 1.20.1 骨架 + 编译通过 ✅（2026-10-19 两轮：jar 产出 + reobf；一轮——Heightmap 存储值 -1 修正、
-  适配器 register/unregister 生命周期、瓦片队列加锁、鹊桥缺席探针、重启维度基线清空；
-  二轮——drain 发送失败出口防停服死循环、停服序「静默→排空」、4 个事件钩子 catch Throwable、
-  isReady 探针 volatile、forge 侧 compileOnly 防御行；另实证驳回「addListener 必须 @SubscribeEvent」误报，见 §6）
-- 依赖基线（2026-10-19）：三加载器元数据声明强制依赖 `queqiao≥0.5.0`（`929453f`）；据此删除 Forge 入口 `Class.forName` 缺席探针与「静默不启动」分支（含其 info 日志），三加载器入口类同构——任何入口**勿再引入**缺席探针/降级装配（规则见 §4.10）。
-- mapstore + map_region ← 本里程碑（2026-10-20 立项，实现进行中）：mca → 本地二维地图库（.qms，xor32/lastSentXor 断点续传）→ 区域流全量/回填，
-  蓝图 docs/DESIGN_MAPSTORE.md；语义已并入 ARCHITECTURE.md §5.5、docs/INTEGRATION.md §3.5、specs mapstore 域（REQ-MS-001…008）。
-- M2 Fabric 1.20.1 ← 下一站（听用户调度）：写 fabric/build.gradle（fabric-loom），放开 settings.gradle include，
-  核对 fabric 各版本覆盖层里的 TODO 版本号（fabric/ 已有骨架源码未接入编译）
-- M3 Forge 实战联调（runServer + 鹊桥 + 消费端按 INTEGRATION.md 收事件）。随办清单：
-  GlobalContext.sendEvent 并发语义与「send=本地入队快操作」假设验证（队列锁内发调色板依赖它）；
-  普通方块放置二级信号（EntityPlaceEvent 仅覆盖 BlockEntity，漏采靠 sha1 去重+区块事件兜底）；
-  ServerStarted 前已加载区块的节流补扫（不补则重启后旧区域空白到玩家回访）；
-  REGION_MERGE_MIN=4 带宽取舍写入 INTEGRATION；mods.toml 可选字段（displayTest/logoFile）
-- M4 NeoForge 1.21.1 / 26.1（ModDevGradle；填 neo_version TODO）
-- M5 开放接入层：5 事件契约冻结 + docs/INTEGRATION.md（接入说明与解析解释；第三方含 owner 自有项目按文档适配）
-- M6 开整备：LICENSE / README / CI
+工作方式（详见 CONTRIBUTING.md §2、specs/README.md）：任何新行为 = ① 先在 `specs/` 立 REQ（SDD：行为规格是唯一契约源）
+→ ② 按 REQ「验证：」行先写红灯测试（方法 `@Tag("REQ-XX-NNN")`，TDD）→ ③ 实现再重构转绿 → ④ 本地四项门禁：
+`gradlew :common:test` + 架构守卫 + jar 冒烟 + spec↔@Tag 双向映射扫描（javac 秒级自检为快路径，见 §3）。
+CI/CD 暂停中：workflow 移入 `.github/workflows.disabled/`，GitHub Actions 不再触发；恢复 = `git mv` 回 `.github/workflows/`。
+
+- **阶段一 ✅ 核心数据链路**（2026-10-19 ~ 2026-10-20）
+  - SDD：protocol/sender/tile/config/lifecycle/architecture/artifact/mapstore 八域 REQ 立制（含 REQ-MS-001…008）；语义见 ARCHITECTURE.md §5.5 与 docs/DESIGN_MAPSTORE.md
+  - TDD：common 62 测试全绿（javac+junit 独立复验）；冒烟类带 `@Tag("smoke")`
+  - 交付：Forge 1.20.1 编译链（jar + reobf + 两轮审计修复）；mapstore + map_region（mca → .qms 地图库 → 区域流，xor32/lastSentXor 断点续传，311b4cb）
+  - 历史明细（Heightmap -1、drain 失败出口、addListener 误报驳回、依赖基线 queqiao≥0.5.0 `929453f` 与「勿引入缺席探针」规则 §4.10）：见 git log 与 §6 矩阵
+- **阶段二 ← 当前目标：接口契约与三方接入固化**
+  - 契约固化（SDD）：五事件 DTO 字段基线只增不改不删（ProtocolBaselineTest / REQ-PROTO-004）；格式令牌语义（`zlib-pal8`、sha1、xor）冻结入 specs；破坏性协议变更必须走新 sub_type / 新格式
+  - 接入固化（TDD 端到端验收）：runServer + 鹊桥 + 消费端按 `docs/INTEGRATION.md` §9.2 对 5 个 sub_type 全量解析验收；跨重启 xor 续传、多连接幂等（服务端 sha1/xor 去重）、调色板 `(server_name, id)` 落盘；§9.3 时序表+排错清单即验收脚本
+  - 门禁：本地四项全绿 + REQ↔@Tag 双向覆盖空 diff（workflow spec-coverage 步骤的本地镜像）
+- **阶段三 多平台扩展**：Fabric 1.20.1（fabric-loom 接入编译、放开 settings include、核对版本覆盖层 TODO）与 NeoForge 1.21.1 / 26.1（填 neo_version TODO）；平台特有行为先进 specs 立 REQ；适配器契约场景（5 事件、维度 registry key、worldSaveRoot 语义）每平台跑通同一组 REQ；复核 §6 矩阵 eventbus `addListener` 校验点
+- **阶段四 开源与 CI/CD 恢复**：LICENSE / README 终稿；`.github/workflows.disabled/` 移回并在新 `v*` 标签重发 Release（v0.0.1 的 Release 与 tag 已撤，留档 SHA a462a73 可重建）
+- 随办清单（原联调备注，归属阶段二前后）：GlobalContext.sendEvent 并发语义与「send=本地入队快操作」假设验证（队列锁内发调色板依赖它）；普通方块放置二级信号（EntityPlaceEvent 仅覆盖 BlockEntity，漏采靠 sha1 去重+区块事件兜底）；ServerStarted 前已加载区块的节流补扫；REGION_MERGE_MIN=4 带宽取舍写入 INTEGRATION；mods.toml 可选字段（displayTest/logoFile）
 
 ## 8. 代码风格
 

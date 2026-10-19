@@ -9,7 +9,7 @@
 1. **规格先行**：新行为先在对应域 `specs/<域>/spec.md` 立/改 REQ（模板见 [TEMPLATE.md](TEMPLATE.md)）→ 评审 → 合并。
 2. **测试先行（红）**：按 REQ 在 `common/src/test` 写测试（方法带 `@Tag("REQ-<域>-NNN")`），先失败。
 3. **实现（绿）**：实现令测试通过，再重构。
-4. **CI 门禁**：测试 + 架构守卫 + jar 冒烟 + spec-coverage 双向映射（[.github/workflows/ci.yml](../.github/workflows/ci.yml)）全绿才可合并。
+4. **CI 门禁**：测试 + 架构守卫 + jar 冒烟 + spec-coverage 双向映射（workflow 暂移至 [.github/workflows.disabled/](../.github/workflows.disabled/)）全绿才可合并；CI/CD 暂停期间该门禁在本地手动跑，恢复后由 workflow 接管。
 
 ## REQ id 规则
 
