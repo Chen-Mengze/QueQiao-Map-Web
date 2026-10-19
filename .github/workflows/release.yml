@@ -33,6 +33,8 @@ jobs:
         run: |
           chmod +x gradlew
           set -euo pipefail
+          # 先 clean：CI 缓存可能还原上一次运行的 build/libs，旧命名产物会混进本次上传
+          ./gradlew :common:clean :forge:clean --no-daemon
           for dir in forge/versions/*/; do
             mc="$(basename "$dir")"
             echo "::group::Forge ${mc}"
