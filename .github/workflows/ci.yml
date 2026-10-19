@@ -56,7 +56,7 @@ jobs:
           path: forge/build/libs/*.jar
           if-no-files-found: error
 
-      - name: 测试失败也保留 common 测试报告（if: always()）
+      - name: "测试失败也保留 common 测试报告（if: always()）"
         if: always()
         uses: actions/upload-artifact@v4
         with:
