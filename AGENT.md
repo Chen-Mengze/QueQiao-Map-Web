@@ -31,7 +31,7 @@ fabric/
 neoforge/
   src/                             NeoForge 入口 + NeoForgePlatformAdapter + src/main/templates（M4）
   versions/1.21.1/  versions/26.1/ 版本覆盖层
-libs/queqiao-tool-0.6.8.jar        compileOnly 鹊桥接口（运行期由鹊桥本体提供，绝不 shade）
+（无 libs/）                  compileOnly 鹊桥接口按坐标 com.github.theword.queqiao:queqiao-tool 从 GitHub Packages 联网拉取（凭据 GH_USERNAME/PACKAGE_READ_ONLY_TOKEN 或 gpr.user/gpr.key；运行期由鹊桥本体提供，绝不 shade）
 specs/                             行为规格（SDD 唯一契约源）：<域>/spec.md，「### REQ-<域>-NNN」条目（见 specs/README.md）
 ```
 
@@ -50,12 +50,13 @@ gradlew :forge:build -PmcTarget=1.20.1    &REM 指定版本覆盖层
 - 元数据模板放 `<loader>/src/main/templates/`，processResources 用 Ant ReplaceTokens（`@token@`）渲染；
   **禁用 filesMatching/expand/eachFile**——那类 DSL 产生 MatchingCopyAction，IDEA 资源模型解析不了会告警。
 - `gradle.properties` 按 ISO-8859-1 读取：中文值必须 `\\uXXXX` 转义（`mod_authors` 即此法），否则注入模板时双重编码。
-- 改动 common 后可用 javac 秒级自检（不需要 MC）：
-  javac --release 17 -cp libs\queqiao-tool-0.6.8.jar -d out <common 全部 .java>
+- 改动 common 后可用 javac 秒级自检（不需要 MC）。鹊桥接口 jar 用 Gradle 缓存实物（先跑过一次 `gradlew :common:compileJava`，
+  jar 位于 %USERPROFILE%\.gradle\caches\modules-2\files-2.1\com.github.theword.queqiao\queqiao-tool\0.6.8\<sha1>\queqiao-tool-0.6.8.jar）：
+  javac --release 17 -cp <该 jar> -d out <common 全部 .java>
   （Windows 路径含空格时用 argfile，argfile 内路径加引号并用正斜杠）。
-- 接/换鹊桥 API 前用 javap 核对签名，不凭记忆：
-  javap -p -cp libs\queqiao-tool-0.6.8.jar com.github.theword.queqiao.tool.GlobalContext
-  javap -p -cp libs\queqiao-tool-0.6.8.jar com.github.theword.queqiao.tool.event.base.BaseEvent
+- 接/换鹊桥 API 前用 javap 核对签名，不凭记忆（同一 Gradle 缓存 jar）：
+  javap -p -cp <queqiao-tool jar> com.github.theword.queqiao.tool.GlobalContext
+  javap -p -cp <queqiao-tool jar> com.github.theword.queqiao.tool.event.base.BaseEvent
   已验证（2026-10）：GlobalContext.sendEvent(BaseEvent) 存在；
   BaseEvent 三参构造器 (String eventName, String postType, String subType)；
   getConfig() 在鹊桥 init 前返回 null —— QueQiaoSink.isReady() 用它做就绪探针（2s 节流）。

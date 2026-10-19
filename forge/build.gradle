@@ -44,12 +44,23 @@ minecraft {
     // runs { server { workingDirectory project.file('run'); server = true } }
 }
 
+repositories {
+    // 鹊桥 tool：与 common/build.gradle 同款 GitHub Packages（凭据见彼处注释）
+    maven {
+        url = 'https://maven.pkg.github.com/17TheWord/QueQiaoTool'
+        credentials {
+            username = (System.getenv('GH_USERNAME') ?: findProperty('gpr.user') ?: '').toString()
+            password = (System.getenv('PACKAGE_READ_ONLY_TOKEN') ?: findProperty('gpr.key') ?: '').toString()
+        }
+    }
+}
+
 dependencies {
     minecraft "net.minecraftforge:forge:${P('minecraft_version')}-${P('forge_version')}"
     implementation project(':common')
     // 与 common/build.gradle 同款防御：不依赖「forge 侧签名暂不暴露鹊桥类型」的巧合，
     // compileOnly 显式声明编译期接口（运行期由鹊桥本体提供，绝不进 jar）
-    compileOnly files("${rootDir}/libs/queqiao-tool-0.6.8.jar")
+    compileOnly "com.github.theword.queqiao:queqiao-tool:${queqiao_tool_version}"
 }
 
 // 主结构类直接并进 mod jar：:common 无任何 net.minecraft 引用，reobf 不会碰它，

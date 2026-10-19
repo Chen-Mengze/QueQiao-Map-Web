@@ -22,3 +22,10 @@ mandatory=true
 versionRange="@minecraft_version_range@"
 ordering="NONE"
 side="BOTH"
+
+[[dependencies.@mod_id@]]
+modId="queqiao"
+mandatory=true
+versionRange="[0.5.0,)"
+ordering="AFTER"
+side="BOTH"

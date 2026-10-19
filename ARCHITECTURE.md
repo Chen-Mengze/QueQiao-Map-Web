@@ -383,12 +383,22 @@ async def handle_mc_message(self, raw):
 
 工具库坐标 `com.github.theword.queqiao:queqiao-tool:0.6.8`，发布在 **GitHub Packages** —— 即使 public 仓库也要求认证。
 
-**解法**：从鹊桥 release jar 解出嵌套 jar（`META-INF/jars/queqiao-tool-0.6.8.jar`；鹊桥用 `include modImplementation(...)`
-打包且 **不 relocate**），放 `libs/` 作 `compileOnly`。MIT 允许。运行时由鹊桥 jar 提供真实类，各加载器的 mod 类加载器互通。
+**解法（现行）**：联网拉取。`repositories` 加 GitHub Packages `https://maven.pkg.github.com/17TheWord/QueQiaoTool`
+（与鹊桥官方构建同源），`compileOnly`/`testImplementation` 坐标 `com.github.theword.queqiao:queqiao-tool:0.6.8`
+（版本单一真相在根 `gradle.properties` 的 `queqiao_tool_version`）。**公开包也要求任意有效令牌**：环境变量
+`GH_USERNAME` + `PACKAGE_READ_ONLY_TOKEN`（只勾 `read:packages` 的 PAT），或 `~/.gradle/gradle.properties` 的
+`gpr.user`/`gpr.key`；CI 注入 `secrets.GITHUB_TOKEN`（workflow 已配）。仓库不留 `libs/` 本地副本。
+运行时真实类由鹊桥本体 jar 的嵌套 `META-INF/jars/queqiao-tool-*.jar`（`include modImplementation(...)` 打包、
+**不 relocate**）提供，各加载器的 mod 类加载器互通；绝不 shade。
 
-> ⚠️ **必须核对**：鹊桥 main 用 tool `0.6.8`（包 `com.github.theword.queqiao.tool.*`）；新 `queqiao-core` 为
-> `io.github.theword.queqiao.core.*`。锁定 jar 后反编译确认 `BaseEvent(String, String, String)` 构造签名与
-> `GlobalContext.sendEvent` 签名再写死 DTO。
+**加载器硬依赖**：三个加载器元数据（`mods.toml` / `neoforge.mods.toml` / `fabric.mod.json`）均已声明 `queqiao`
+≥0.5.0 为强制依赖（fabric `depends`、forge `mandatory=true`、neoforge `type="required"`，均 `ordering=AFTER`）：
+缺少鹊桥时加载器直接拒绝加载并抛异常，本 mod 不再有「静默不启动」的中间态。
+
+> ⚠️ **实测核对**：鹊桥 0.5.0–0.5.2 内嵌 tool `0.6.8`，0.5.3 内嵌 `0.6.10`（jar 内 `META-INF/jars/` 实物验证，
+> 包名均 `com.github.theword.queqiao.tool.*` 不 relocate）；编译基线锁 `0.6.8`（已验证 `BaseEvent(String, String,
+> String)` 构造与 `GlobalContext.sendEvent` 签名，38 个契约测试全绿）。新 `queqiao-core` 换包名为
+> `io.github.theword.queqiao.core.*` 且移除 `GlobalContext`——届时迁移另立 REQ，勿顺手改。
 
 ---
 

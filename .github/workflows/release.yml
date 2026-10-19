@@ -12,6 +12,7 @@ on:
 
 permissions:
   contents: write
+  packages: read   # 联网拉取鹊桥 queqiao-tool（GitHub Packages）
 
 jobs:
   forge:
@@ -30,6 +31,9 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
 
       - name: Build every MC version under forge/versions
+        env:
+          GH_USERNAME: ${{ github.actor }}
+          PACKAGE_READ_ONLY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           chmod +x gradlew
           set -euo pipefail

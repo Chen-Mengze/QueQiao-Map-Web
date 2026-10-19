@@ -19,7 +19,7 @@ Minecraft 服务端 mod：把「顶层方块地图瓦片 + 玩家位置」以事
 
 ## 前置与快速开始
 
-1. 服务端已安装鹊桥 QueQiao Tool（本 mod 是其附属扩展，鹊桥是唯一通道；未安装时本 mod 整体不启动）。
+1. 服务端已安装**鹊桥 QueQiao mod（≥0.5.0）**：本 mod 在三个加载器的元数据里把它声明为**强制依赖**，缺少时加载器直接拒绝加载并抛异常（鹊桥是唯一通道，无降级路径）。
 2. 将 `queqiao_map_web-<加载器>-<版本>+mc<MC版本>.jar`（文件名自带适配加载器标注，如 `queqiao_map_web-forge-0.0.1+mc1.20.1.jar`）放入服务端 `mods/`。
 3. 编辑服务端 `config/QueQiao/queqiao_map_web.yml`（首次启动自动生成）开启：
 
@@ -47,8 +47,7 @@ queqiao_map_web/
 ├── forge/         Forge 分支：入口 QueqiaoMapWeb + ForgePlatformAdapter（分支内唯一接触 MC 类处）
 │   └── versions/  每 MC 版本一个目录，只放 gradle.properties（版本/映射/Java 唯一真相）
 ├── fabric/        Fabric 分支（同构，M2）
-├── neoforge/      NeoForge 分支（同构，M4）
-└── libs/          compileOnly 鹊桥接口 jar（运行期由鹊桥本体提供，绝不 shade）
+└── neoforge/      NeoForge 分支（同构，M4）
 ```
 
 数据流：服务端事件 → `PlatformAdapter`（平台契约）→ `common` 主结构 → `QueQiaoSink` → 鹊桥事件桥 → 第三方消费端。
@@ -58,6 +57,13 @@ queqiao_map_web/
 ## 构建
 
 仓库自带 Gradle Wrapper，本机只需 JDK 17+ 启动环境；实际编译用的 Java 版本由 Gradle toolchain 按各版本目录的 `java_version` 自动匹配，无需手动指定 `JAVA_HOME`。
+
+编译期鹊桥接口从 **GitHub Packages** 联网拉取（`com.github.theword.queqiao:queqiao-tool`，版本见 `gradle.properties` 的 `queqiao_tool_version`）。公开包也要求认证，一次性配置任选其一：
+
+- 环境变量（与鹊桥官方构建同名）：`setx GH_USERNAME "<GitHub用户名>"`、`setx PACKAGE_READ_ONLY_TOKEN "<PAT>"`（PAT 只勾 `read:packages`；重开终端生效）；
+- 或 `~/.gradle/gradle.properties` 写 `gpr.user=<GitHub用户名>`、`gpr.key=<PAT>`。
+
+CI 零配置：workflow 已注入 `GITHUB_TOKEN`。
 
 ```bat
 :: Windows

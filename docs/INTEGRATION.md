@@ -14,7 +14,7 @@
 
 1. **JSON 协议**（首选消费方式）：4 个 `sub_type` 的消息 JSON，字段语义见 §2–§4。
 2. **Java DTO**（可选，给基于鹊桥的 Java 消费端）：`common` 模块的 `event/` 与 `model/` 包即数据结构本体，
-   可 `compileOnly` 引用 `common` 产物与 `libs/queqiao-tool-0.6.8.jar` 直接在进程内 `instanceof` 收取（绝不 shade）。
+   可 `compileOnly` 引用 `common` 产物与坐标 `com.github.theword.queqiao:queqiao-tool:0.6.8`（GitHub Packages，见 [ARCHITECTURE.md §7](../ARCHITECTURE.md)）直接在进程内 `instanceof` 收取（绝不 shade）。
 3. **本文档 + ARCHITECTURE.md §4**：协议契约的唯一出处，改动走版本号（见 §7）。
 
 ## 1. 信封字段与路由
@@ -204,7 +204,7 @@ dimension_check_interval_ms: 5000
 
 - `common` 模块产物（无任何 `net.minecraft.*` 依赖）：`event/PlayerMoveEvent|MapTileEvent|MapPaletteEvent|MapDimensionsEvent`、
   `model/PlayerPosModel|TilePayloadModel`；
-- `compileOnly libs/queqiao-tool-0.6.8.jar`（运行期类由鹊桥本体提供，两边类加载器互通；绝不把 tool 打进自己 jar）。
+- `compileOnly` 坐标 `com.github.theword.queqiao:queqiao-tool:0.6.8`（GitHub Packages 拉取；运行期类由鹊桥本体提供，两边类加载器互通；绝不把 tool 打进自己 jar）。
 
 注意包名风险：tool `0.6.8` 是 `com.github.theword.queqiao.tool.*`，新 `queqiao-core` 是 `io.github.theword.queqiao.core.*`
 （详见 ARCHITECTURE.md §7）。跨版本前先 `javap` 核对，别凭记忆。
