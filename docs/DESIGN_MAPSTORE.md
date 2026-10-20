@@ -114,9 +114,10 @@ region_stream_max_regions_per_event: 4 # 钳制 ≥1 ≤16
 > **实现偏差注记（2026-10-20，全仓文档审计）**：实现整体与本蓝图一致，两点澄清——① 停服实际调用顺序：加载器入口（ServerStopping 钩子）先 `adapter.shutdown()`，随后 `ModLifecycle.stop()` 内部为 streamer→backfill→drain，以上文「停服：stop() 顺序 streamer 停 → backfill 停 →（入口已 adapter.shutdown）→ tileQueue.drain()」括注为准；本节 specs 摘要中「008 停服顺序 streamer→backfill→adapter→drain」为历史简写，REQ-MS-008 已按前句口径修正。② BackfillEngine / RegionStreamer 引擎线程在鹊桥 isReady() 后首个 tick 启动（REQ-LIFE-005 门），两线程均为守护线程（`setDaemon(true)`），与蓝图「鹊桥就绪后开始」一致。
 - README 特性表加一行 map_region。
 
-## 8. 验证手段（Gradle 缓存缺 queqiao-tool 凭据，勿碰 Gradle 网络墙）
+## 8. 验证手段
 
-- javac 快检（AGENT §3）：jar 实物流 C:\Users\Yumezawa\AppData\Local\Temp\qqmap-web-spec\libs\queqiao-tool-0.6.8.jar：
-  javac --release 17 -cp <jar> -d out <common 全部 .java>（路径含空格用 argfile、正斜杠加引号）。
-- 单测：JUnit5 同 temp libs 若带 junit 则跑；否则保证 javac 干净 + 提交后 lead 汇总跑 :common:test（需凭据，lead 处理）。
-- 三方分工（写域互斥）：T1 = mapstore 包全部新文件+其测试+specs/mapstore；T2 = TileQueue/ModLifecycle/MapExtConfig/PlatformAdapter/三适配器/event/model/RegionStreamer+对应测试与 spec 追加；T3 = 全部文档（AGENT/ARCHITECTURE/README/INTEGRATION/DESIGN 落地注记）。
+- 单测（权威）：`gradlew --offline :common:test`——queqiao-tool 是固定版本的 non-changing 依赖，
+  Gradle 缓存命中即可离线编译与跑测；只有缓存里没有时才需 GitHub Packages 凭据（AGENT.md §3）。
+- javac 快检（AGENT.md §3）：鹊桥接口 jar 实物在 Gradle 缓存
+  `<GRADLE_USER_HOME>/caches/modules-2/files-2.1/com.github.theword.queqiao/queqiao-tool/<版本>/<sha1>/queqiao-tool-<版本>.jar`，
+  `javac --release 17 -cp <该 jar> -d out <common 全部 .java>`（Windows 路径含空格用 argfile、正斜杠加引号）。

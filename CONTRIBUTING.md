@@ -10,11 +10,12 @@
 |---|---|---|
 | 根包 queqiao_map_web | ModLifecycle | 装配 + 生命周期（平台无关核心） |
 | config/ | MapExtConfig | queqiao_map_web.yml 解析与默认值（config/QueQiao/ 下） |
-| event/ | PlayerMoveEvent / MapTileEvent / MapPaletteEvent / MapDimensionsEvent | 四个上报事件（extends BaseEvent） |
-| model/ | PlayerPosModel / TilePayloadModel | Gson DTO（字段名单单词，反射直出） |
+| event/ | PlayerMoveEvent / MapTileEvent / MapPaletteEvent / MapDimensionsEvent / MapRegionEvent | 五个上报事件（extends BaseEvent） |
+| model/ | PlayerPosModel / TilePayloadModel / RegionPayloadModel | Gson DTO（字段名单单词，反射直出） |
 | platform/ | PlatformAdapter（接口）；实现 = <加载器>PlatformAdapter（ForgePlatformAdapter…） | 加载器差异抹平 |
 | tile/ | TileQueue / Palette / TopBlockRenderer | 瓦片功能集：脏区块刷写队列 / 调色板冻结 / 瓦片编码 |
 | sampler/ | PositionSampler | 玩家位置差分采样（瓦片队列在 tile/） |
+| mapstore/ | MapStore / BackfillEngine / RegionStreamer / RegionFileReader / NbtReader / ChunkTopScanner / BlockColors | 本地二维地图库、回填与区域流（同样零 MC 依赖） |
 | sender/ | EventSink（接口）/ QueQiaoSink | 发送抽象与鹊桥实现（GlobalContext 只许出现在 QueQiaoSink.java） |
 | 各加载器分支根 | **QueqiaoMapWeb**（三加载器同名、包隔离） | 主入口类名 = modid（queqiao_map_web）的 PascalCase |
 

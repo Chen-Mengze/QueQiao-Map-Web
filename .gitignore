@@ -30,6 +30,7 @@ Thumbs.db
 
 # DSH 工具操作锁残留
 .dsh-ops-*.lock
+.dsh-ops/
 
 # 本地测试运行落地的服务端目录（根级）
 /plugins/

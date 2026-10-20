@@ -55,7 +55,8 @@ gradlew :forge:build -PmcTarget=1.20.1    &REM 指定版本覆盖层
   **禁用 filesMatching/expand/eachFile**——那类 DSL 产生 MatchingCopyAction，IDEA 资源模型解析不了会告警。
 - `gradle.properties` 按 ISO-8859-1 读取：中文值必须 `\\uXXXX` 转义（`mod_authors` 即此法），否则注入模板时双重编码。
 - 改动 common 后可用 javac 秒级自检（不需要 MC）。鹊桥接口 jar 用 Gradle 缓存实物（先跑过一次 `gradlew :common:compileJava`，
-  jar 位于 %USERPROFILE%\.gradle\caches\modules-2\files-2.1\com.github.theword.queqiao\queqiao-tool\0.6.8\<sha1>\queqiao-tool-0.6.8.jar）：
+  jar 位于 Gradle 缓存根（`GRADLE_USER_HOME`，未设置时 `%USERPROFILE%\.gradle`）下的
+  caches\modules-2\files-2.1\com.github.theword.queqiao\queqiao-tool\<版本>\<sha1>\queqiao-tool-<版本>.jar）：
   javac --release 17 -cp <该 jar> -d out <common 全部 .java>
   （Windows 路径含空格时用 argfile，argfile 内路径加引号并用正斜杠）。
 - 接/换鹊桥 API 前用 javap 核对签名，不凭记忆（同一 Gradle 缓存 jar）：
@@ -129,7 +130,7 @@ JSON 字段名 = 单单词 camelCase 字段（Gson 反射直出，不受命名�
 | RL 构造 | ResourceLocation.tryParse(s)（非法返回 null；单参构造器 47.4.x 已 deprecated-for-removal） | ResourceLocation.parse(s) | new Identifier(s) |
 | ResourceKey | ResourceKey.create(Registries.DIMENSION, rl) | 同左 | RegistryKey.of(Registry.DIMENSION_KEY, id) |
 | 配置目录 | FMLPaths.CONFIGDIR | 同名 | FabricLoader.getInstance().getConfigDir() |
-| 事件注册 | `addListener(方法引用)` 无需 @SubscribeEvent（eventbus 6.2.33 javap 实证：addListener 链无注解校验，注解检查只在 register(Object)；jar 内无 InvalidSubscriptionException） | M4 再核（bus 库版本不同，校验可能更严） | 不适用（回调注册） |
+| 事件注册 | `addListener(方法引用)` 无需 @SubscribeEvent（eventbus 6.2.33 javap 实证：addListener 链无注解校验，注解检查只在 register(Object)；jar 内无 InvalidSubscriptionException） | 阶段三接入时再核（bus 库版本不同，校验可能更严） | 不适用（回调注册） |
 
 > 命名基线：主入口类 QueqiaoMapWeb（三个加载器同名、包隔离，类名同步 modid）；装配核心 ModLifecycle；mod id 统一 queqiao_map_web（与包名、gradle.properties、mods.toml 一致）；Fabric 元数据是 fabric.mod.json；全工程 **无 Mixin**；鹊桥 API 使用前必须 javap 核对（见 §3）。
 
