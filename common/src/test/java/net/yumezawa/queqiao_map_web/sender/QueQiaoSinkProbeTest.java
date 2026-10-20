@@ -18,7 +18,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * REQ-SEND-002：QueQiaoSink 未就绪探针。探针口径：GlobalContext.getConfig()==null
- * 即鹊桥尚未 init（QueQiaoSink.java:37）；探针结果 2000ms 节流缓存（QueQiaoSink.java:13,33）。
+ * 即鹊桥尚未 init（QueQiaoSink.isReady）；探针结果按 PROBE_INTERVAL_MS=2000ms 节流缓存。
  * 注意 BaseEvent 构造事件要求 config 非空：「未就绪」场景先构造事件、再清 config。
  */
 class QueQiaoSinkProbeTest {

@@ -31,7 +31,7 @@ import java.util.logging.Logger;
 
 /**
  * Forge 1.20.1（official mappings, forge 47.4.x）实现 PlatformAdapter。
- * forge/origin 是本分支唯一接触 net.minecraft.* 的地方；origin 主结构不 import 任何 MC 类。
+ * forge 分支是本加载器唯一接触 net.minecraft.* 的地方；common 主结构不 import 任何 MC 类。
  *
  * API 实况核对（javap forge-1.20.1-47.4.28_mapped_official_1.20.1，2026-10）：
  * Heightmap 枚举是 Types（复数；1.20.1 official 即如此，勿与 yarn 的 Type 混用）；
@@ -146,9 +146,8 @@ public final class ForgePlatformAdapter implements PlatformAdapter {
     }
 
     /**
-     * 世界存档根目录（world/ 本体）。1.20.1 official mappings 已知实签：
+     * 世界存档根目录（world/ 本体）。1.20.1 official mappings 实签（javap 已核对，AGENT §6）：
      * MinecraftServer#getWorldPath(LevelResource) -> java.nio.file.Path，LevelResource.ROOT 常量存在。
-     * 注：forge/versions/1.20.1 依赖 jar 未落盘（gradle 未跑），javap 复核待做（AGENT §6）。
      */
     @Override
     public Path worldSaveRoot() {

@@ -22,7 +22,7 @@ import java.util.logging.Logger;
 /**
  * 主结构（平台无关）：装配 + 生命周期。三个加载器入口（同名 QueqiaoMapWeb，
  * 各自包内）只做两件事——把加载器事件转交给 PlatformAdapter 实现、调用本类的
- * start / stop。所有业务逻辑在这里与 origin 子包里，加载器差异被 PlatformAdapter 抹平。
+ * start / stop。所有业务逻辑在这里与各领域子包里，加载器差异被 PlatformAdapter 抹平。
  *
  * 前置铁律：本 mod 是鹊桥（QueQiao）的附属扩展——鹊桥是唯一发送通道，不存在任何
  * 兜底/直连通道。鹊桥未就绪时整个数据面休眠（零采样、零渲染、零流量），就绪后自动开启。

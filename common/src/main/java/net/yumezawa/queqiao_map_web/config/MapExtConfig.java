@@ -16,7 +16,7 @@ public final class MapExtConfig {
 
     /** 配置挂到鹊桥本体的配置子目录：config/QueQiao/ */
     public static final String SUB_DIR = "QueQiao";
-    /** 文件名与 mod id 同步（旧名 queqiao-mapext.yml 已废弃） */
+    /** 文件名与 mod id 同步 */
     public static final String FILE_NAME = "queqiao_map_web.yml";
 
     /** 兼容性第 1 层保护：总开关，默认关闭 */
@@ -35,7 +35,7 @@ public final class MapExtConfig {
     public int maxChunkRendersPerTick = 64;
     /** 待刷写队列长度上限，超出静默丢弃并告警一次 */
     public int pendingCap = 1024;
-    /** 调色板标识（随 MapPaletteEvent 发送一次） */
+    /** 调色板标识（MapPaletteEvent 首发一次，之后按 palette_republish_interval_ms 重发同一快照） */
     public String paletteId = "vanilla-1.20.1-a";
     /** 维度列表变化检测间隔 */
     public long dimensionCheckIntervalMs = 5000;

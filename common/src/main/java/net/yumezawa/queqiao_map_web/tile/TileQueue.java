@@ -110,7 +110,7 @@ public final class TileQueue {
      * 消费端对同 id+同 colors 幂等，重复收到无副作用。
      * 首发（publishPalette）成功前禁止重发：否则会发出未注册真实色的半空调色板并被冻结。
      * 不改变 paletteSent 与冻结态，也不影响 publishPalette / palettePublished 的既有语义；
-     * 重发节奏由 ModLifecycle 按 palette_republish_interval_ms 周期调度（他人实现），本方法只执行一次重发。
+     * 重发节奏由 ModLifecycle.onServerTick 按 palette_republish_interval_ms 周期调度，本方法只执行一次重发。
      *
      * @return true = 已首发且本次 send 成功；false = 尚未首发（零事件）或本次 send 失败
      */

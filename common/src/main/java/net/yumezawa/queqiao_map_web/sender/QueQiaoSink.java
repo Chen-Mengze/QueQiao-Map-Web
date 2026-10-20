@@ -6,7 +6,7 @@ import com.github.theword.queqiao.tool.event.base.BaseEvent;
 /**
  * 首选发送器：直连鹊桥 GlobalContext.sendEvent。
  * 【全工程唯一】允许 import com.github.theword.queqiao.tool.GlobalContext 的文件。
- * 运行期该类由鹊桥本体 jar 提供（编译期 compileOnly libs/queqiao-tool-0.6.8.jar）。
+ * 编译期按坐标 com.github.theword.queqiao:queqiao-tool 以 compileOnly 引入（见 AGENT.md §3），绝不 shade。
  */
 public final class QueQiaoSink implements EventSink {
 

@@ -143,7 +143,7 @@ class ModLifecycleSmokeTest {
     @Test
     @Order(3)
     @Tag("REQ-LIFE-003")
-    @DisplayName("停服路径：任一 send 失败 → 排空立即停止——不死循环、不抛异常（adapter.shutdown→drain 的顺序本身由 forge 入口 QueqiaoMapWeb.java:56-57 完成）")
+    @DisplayName("停服路径：任一 send 失败 → 排空立即停止——不死循环、不抛异常（adapter.shutdown→drain 的顺序本身由各加载器入口完成）")
     void stopDrainStopsAtFirstSendFailure() throws Exception {
         writeConfig("enabled: true", "batch_size: 4");
         lifecycle.start(adapter, dir);
@@ -191,11 +191,11 @@ class ModLifecycleSmokeTest {
         enqueue4Chunks();
         adapter.tickConsumer.accept(List.of(player(10.5)));
         assertEquals(List.of("player_move", "map_palette", "map_tile", "map_dimensions"), sink.subTypes(),
-                "一个 tick 内四类事件按源码时序出现（dimensions 在末位，见报告差异项）");
+                "一个 tick 内四类事件按源码时序出现（dimensions 在末位）");
 
         MapPaletteEvent pe = (MapPaletteEvent) sink.sent.get(1);
         assertEquals("vanilla-1.20.1-a", pe.getId());
-        assertEquals("#000000", pe.getColors().get(0), "调色板下标 0 = 未设置（冻结时序缺陷见 TileQueueTest @Disabled 用例）");
+        assertEquals("#000000", pe.getColors().get(0), "调色板下标 0 = 未设置（pack 量化先于调色板快照的时序由 TileQueueTest 守护）");
 
         MapTileEvent te = (MapTileEvent) sink.sent.get(2);
         assertEquals(DIM, te.getDimension());

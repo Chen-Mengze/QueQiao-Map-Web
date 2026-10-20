@@ -34,7 +34,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * REQ-LIFE-005 / REQ-MS-008：停服收尾顺序 streamer → backfill →（入口 adapter.shutdown）→ drain。
- * adapter.shutdown 在加载器入口（forge QueqiaoMapWeb.java:56-57）先于 ModLifecycle.stop，
+ * adapter.shutdown 在加载器入口先于 ModLifecycle.stop（三入口同构，AGENT.md §4.7），
  * 本仓库 common 侧可断言的是 ①②④ 的顺序与「drain 的 map_tile 之后不再有 map_region」的效果。
  * 区域流在 4096 B/s 节流下对 20 个区域的广播必然未完成时 stop() 介入。
  */

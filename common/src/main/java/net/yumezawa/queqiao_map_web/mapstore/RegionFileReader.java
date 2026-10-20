@@ -25,8 +25,8 @@ import java.util.zip.InflaterInputStream;
  * 压缩类型：1=gzip，2=zlib，3=不压缩，其余记 WARNING 语义按跳过处理（抛 IOException 由调用方吞掉）。</p>
  *
  * <p>本类只在后台线程被调用；{@link #listChunks(Path)} 内部吞异常返回可能不完整的列表，
- * {@link #readChunkNbt(Path, ChunkLocation)} 按蓝图声明 throws IOException，由调用方（BackfillEngine /
- * RegionStreamer 队友）吞掉记 FINE。</p>
+ * {@link #readChunkNbt(Path, ChunkLocation)} 按蓝图声明 throws IOException，由调用方（BackfillEngine）
+ * 吞掉记 FINE。</p>
  */
 public final class RegionFileReader {
 
