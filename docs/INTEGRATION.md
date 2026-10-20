@@ -38,11 +38,11 @@
 ```
 鹊桥 init 完成 + 服务端启动  →  mod 才开始发送（此前完全静默，零流量）
   1. map_dimensions   连接建立后一次；之后清单变化时重发（5s 巡检）
-  2. map_palette      任何 map_tile / map_region 之前必达；每个服务端会话一次（WS 重连不重放）；发出后即冻结
+  2. map_palette      任何 map_tile / map_region 之前必达；发出后即冻结；首发成功后按 palette_republish_interval_ms（默认 10s）周期性重发同一快照——晚接入/WS 重连的消费端在间隔内自愈（REQ-PAL-003）
   3. player_move / map_tile / map_region   持续批量流（map_region 为区域全量/续传流，节流见 §6）
 ```
 
-消费端建议：收到 `map_tile` 但尚无调色板时要么丢弃、要么挂起等调色板；调色板按 `(server_name, paletteId)` 缓存（WS 重连不会重放 palette，落盘最稳，见 §9.2）。
+消费端建议：收到 `map_tile` 但尚无调色板时要么丢弃、要么挂起等调色板；调色板按 `(server_name, paletteId)` 缓存（palette 会按间隔重发；旧版本服务端只发一次时落盘仍是兜底，见 §9.2）。
 
 ## 3. 事件契约与 JSON 样例
 
@@ -71,6 +71,7 @@
 - `colors[0]` 固定 `#000000`，语义是**未设置**（见 §4.3），渲染成透明，不要画黑。
 - 发出后调色板**冻结**：本次服务端会话内所有瓦片都用它量化。服务端重启会**重发**（按配置 id）；调色板内容升级先递增 id（`…-a` → `…-b`）再发（见 §7）
   （`vanilla-1.20.1-a` → `-b` 递增修订位）。
+- 同一 id+colors 的 `map_palette` 会按间隔**重复到达**（`palette_republish_interval_ms`，默认 10s，§2/§6）——消费端必须**幂等**处理：`(server_name, id)` 已缓存且 colors 相同即直接跳过，这是晚接入/断线重连的自愈通道（REQ-PAL-003）；调色板内容升级仍走 id 递增修订位（§7 不变）。
 
 ### 3.3 player_move — 玩家位置（批量）
 
@@ -192,7 +193,7 @@ async function decodeTile(t, colors) {
 
 1. 未知 `sub_type` / 未知字段：忽略。
 2. `format` 不等于 `zlib-pal8`：跳过该瓦片并记日志（新编码会用新 format 字符串）。
-3. 调色板缺 id：挂起或丢弃瓦片，等新 `map_palette`。
+3. 调色板缺 id：挂起或丢弃瓦片，等新 `map_palette`。服务端现按间隔重发已发布调色板（§2），丢弃未决瓦片的窗口最迟一个间隔即恢复；挂起等调色板仍是最稳选择。
 4. 所有解析 `try/except` 兜底，绝不把异常抛回消息接收循环（否则打断整条鹊桥连接）。
 5. 多服务器：用信封里的 `server_name/server_version` 分流。
 6. 乱序/重复：单条鹊桥连接内 TCP 有序，但重连可能重放；瓦片按位置键覆盖写即可幂等。
@@ -217,6 +218,8 @@ backfill_max_chunks_per_sec: 512         # 回填节流（按 chunk 计，钳制
 region_stream_enabled: true              # map_region 区域流开关
 region_stream_bytes_per_sec: 65536       # 区域流节流（按压缩字节计，钳制 ≥4096）
 region_stream_max_regions_per_event: 4   # 单事件最多区域数（钳制 ≥1 ≤16）
+palette_republish_interval_ms: 10000     # 已发布调色板重发间隔毫秒（0=关闭）
+region_replay_on_start: false            # true=会话启动时复位全部 lastSentXor 全量重放区域（一次性自愈开关）
 ```
 
 量级参考：8×8 区域瓦片（128×128 索引）zlib 后典型 0.5–2 KB；合并摊薄后 ≈20 B/区块。
@@ -306,7 +309,7 @@ STATE_FILE, OUT_DIR = "state.json", "out"
 OFFLINE_AFTER_S = 5.0                                # §3.3：离线判定在消费端，>5s 未更新即标离线
 
 # ---------- 状态（键全部含 server_name，多台互不串扰，§1/§5.5） ----------
-palettes = {}        # (server_name, palette id) → colors[#RRGGBB 列表]（§3.2）；JSON 落盘=重连不重放的对策
+palettes = {}        # (server_name, palette id) → colors[#RRGGBB 列表]（§3.2）；JSON 落盘=旧服务端只发一次的兜底
 last_palette_id = {} # server_name → 最新调色板 id（渲染入口）
 xor_of = {}          # "server|dim|rx|rz" → xor（§3.5：服务端据此决定重发；本地留档核对续传）
 grids = {}           # (server, dim, rx, rz) → bytearray(512*512) 索引网格；1 像素=1 字节=调色板下标
@@ -394,7 +397,7 @@ async def handle(raw):
             pid, colors = m["id"], m["colors"]
             palettes[(server, pid)] = colors
             last_palette_id[server] = pid
-            save_state()                                            # palette 只在服务端启动后发一次：落盘防 WS 重连
+            save_state()                                            # palette 按间隔重发（旧服务端只发一次）：(server,id) 幂等缓存+落盘仍是冷启动兜底
             print("[palette]", server, pid, f"{len(colors)} colors")
         elif st == "player_move":
             now = time.monotonic()
@@ -479,7 +482,7 @@ if __name__ == "__main__":
 | 时间点 | 应看到 |
 |---|---|
 | 启动后 ~5s | 一条 `map_dimensions`（之后 5s 巡检跟变化） |
-| 紧随 | 首刷 `map_palette`（服务端启动后发一次，随后冻结） |
+| 紧随 | 首刷 `map_palette`（服务端启动后发一次，随后冻结；随后按 palette_republish_interval_ms 周期重发） |
 | 持续 | `map_tile` / `player_move` 增量流；老服务器首会话另有 `map_region` 全量补发，按默认 64 KB/s ≈ 2000 区域 10–20 分钟（§3.5 预算） |
 
 排错：
@@ -487,5 +490,6 @@ if __name__ == "__main__":
 - **任何阶段零流量**：依次查 本 mod `enabled: true` → 鹊桥 init 完成（此前 mod 完全静默，§2）→ 两模式恰好启用其一、`url_list`/host:port 正确、防火墙放行 → `access_token` 两端一致。
 - **只有 `map_tile` 没有 `map_region`**：`region_stream_enabled` 未开（§6），或服务端 `worldSaveRoot()` 不支持导致 mapstore 关闭、仅剩实时流（见 ARCHITECTURE.md §5.5）；再看 `backfill_enabled` 与 store 目录是否已有 `.qms`。
 - **重连后没有重复 region 流**：这是正常——xor 续传生效（§3.5），服务端判定你已一致，只有新增/变化区域会流。
-- **重连收不到 `map_palette`**：palette 只在服务端启动后发一次、WS 重连不重放；§9.2 的 `state.json` 缓存就是对策，不要因此挂起全部渲染。
+- **区域曾在消费端离线期间已发送导致永不重发**：把 `region_replay_on_start` 设 `true` 启动一次（就绪首 tick 复位全部 `lastSentXor`，全部区域按区域流限速重放一遍，§6），恢复后改回 `false`；旧办法=删世界存档下 `queqiao_map_web/store/` 让回填重建。
+- **重连收不到 `map_palette`**：新版服务端按间隔自动重发调色板（§2/§6，≤10s 自愈）；旧版本服务端只发一次时，§9.2 的 `state.json` 落盘缓存兜底，不要因此挂起全部渲染。
 - **图大面积深灰**：该范围索引全 0（未采样，§4.3），不是解码错误；等回填/区域流追上即可。

@@ -166,4 +166,33 @@ class MapExtConfigTest {
         assertEquals(65536, d.regionStreamBytesPerSec, "解析失败 → 保持默认");
         assertEquals(1, d.regionStreamMaxRegionsPerEvent, "-5 → 钳制下限 1");
     }
+
+    @Test
+    @Tag("REQ-CFG-005")
+    @DisplayName("晚接入自愈两键：默认 10000/false、DEFAULT_YML 含两键、正值钳制 ≥1000、0=关闭、解析失败保持默认、布尔 parseBoolean 语义")
+    void lateJoinSelfHealKeysParsed() throws IOException {
+        MapExtConfig def = MapExtConfig.load(file());
+        assertEquals(10000L, def.paletteRepublishIntervalMs, "默认 10s 周期重发");
+        assertFalse(def.regionReplayOnStart, "区域重放默认关（零流量铁律不受新功能削弱）");
+        String yml = Files.readString(file(), StandardCharsets.UTF_8);
+        assertTrue(yml.contains("palette_republish_interval_ms: 10000"), "DEFAULT_YML 必须含 palette_republish_interval_ms");
+        assertTrue(yml.contains("region_replay_on_start: false"), "DEFAULT_YML 必须含 region_replay_on_start");
+
+        MapExtConfig c = writeAndLoad(
+                "palette_republish_interval_ms: 20000 # 行尾注释",
+                "region_replay_on_start: true"
+        );
+        assertEquals(20000L, c.paletteRepublishIntervalMs);
+        assertTrue(c.regionReplayOnStart);
+
+        MapExtConfig clamped = writeAndLoad("palette_republish_interval_ms: 100");
+        assertEquals(1000L, clamped.paletteRepublishIntervalMs, "正值钳制下限 1000");
+
+        MapExtConfig off = writeAndLoad("palette_republish_interval_ms: 0");
+        assertEquals(0L, off.paletteRepublishIntervalMs, "0=关闭周期重发");
+
+        MapExtConfig bad = writeAndLoad("palette_republish_interval_ms: abc", "region_replay_on_start: nope");
+        assertEquals(10000L, bad.paletteRepublishIntervalMs, "解析失败 → 保持默认");
+        assertFalse(bad.regionReplayOnStart, "Boolean.parseBoolean：非 true 值一律 false");
+    }
 }

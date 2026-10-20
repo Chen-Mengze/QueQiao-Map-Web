@@ -124,7 +124,7 @@ QueQiao Map Web/
 │       ├── sampler/PositionSampler.java            玩家位置采样：差分 + 节流 + last-value 合并
 │       ├── tile/                                   瓦片功能集：刷写队列 + 调色板 + 编码
 │       │   ├── TileQueue.java                      脏区块去重 + 批量刷写
-│       │   ├── Palette.java                        共享 256 色，只发一次
+│       │   ├── Palette.java                        共享 256 色，首发冻结+按间隔重发
 │       │   └── TopBlockRenderer.java               zlib + sha1 + base64 打包
 │       ├── mapstore/                              二维地图库与回填/区域流（纯 JDK）
 │       │   ├── MapStore.java                       .qms 区域库（xor32/lastSentXor 断点续传）
@@ -275,7 +275,7 @@ public interface PlatformAdapter {
 }
 ```
 
-### 4.3 MapPaletteEvent（连接后发一次）
+### 4.3 MapPaletteEvent（连接后发一次 + 周期重发）
 
 ```json
 {
@@ -382,7 +382,7 @@ public interface PlatformAdapter {
 |---|---|---|
 | 实时增量流（现有） | 脏区块 → 主线程采样 RGB24 → `TileQueue` 发 `map_tile` | 语义不动；新增**写穿 MapStore**（`putChunk`），store 保持最新、xor 随之演进 |
 | 回填流（新） | `BackfillEngine` 自有后台线程【只读】mca → 解码顶层方块 → RGB → `putRegion` 整区域入库 | 只补 store 缺失/更新的区域（mtime 比对）；不产 map_tile，避免与区域流重复；按 chunk 令牌桶节流 |
-| 区域流（新） | `RegionStreamer` 把 MapStore 内容按区域打包成 `map_region` 事件限速流式输出 | 鹊桥就绪且 palette 已发后启动；`xor32 == lastSentXor` 的区域跳过 → 重启/重连近零流量 |
+| 区域流（新） | `RegionStreamer` 把 MapStore 内容按区域打包成 `map_region` 事件限速流式输出 | 鹊桥就绪且 palette 已发后启动；`xor32 == lastSentXor` 的区域跳过 → 重启/重连近零流量；`region_replay_on_start: true` = 就绪首 tick 在区域流启动前把全部 `lastSentXor` 归零 → 全部区域全量重放（REQ-MS-009，一次性） |
 
 鹊桥没有反向请求通道，「用时发送」由 xor 续传近似：消费端已一致的区域，服务端直接跳过不发。
 
@@ -398,7 +398,7 @@ magic QMS1 | u16 side=512 | u8 formatVer=1 | u32 xor32 | u32 lastSentXor
 ```
 
 - **xor32**：对 payload **原始字节**按 4 字节大端组做 XOR——Xaero 式异或校验，标识「库内容版本」；与 wire 侧 `sha1`（压缩字节摘要）分属两层，两个都要发。
-- **lastSentXor**：最近一次成功外发的区域 xor（发送成功后 `markSent` 更新）。`(server, dimension, rx, rz) + xor` 变化才重发 = **断点续传**；`mtimeMillis` 与 mca mtime 比对做回填增量判定。
+- **lastSentXor**：最近一次成功外发的区域 xor（发送成功后 `markSent` 更新）。`(server, dimension, rx, rz) + xor` 变化才重发 = **断点续传**；`mtimeMillis` 与 mca mtime 比对做回填增量判定。`region_replay_on_start: true` 时，鹊桥就绪首 tick、区域流启动前把本地库全部区域的 `lastSentXor` 复位为 0（仅该字段），全部 xor≠0 区域按既有节流（`region_stream_bytes_per_sec`）重放一遍 = 一次性全量自愈（REQ-MS-009，用完改回 false）。
 - 全 0 像素 = 未采样（palette 下标 0 = 透明），与 map_tile 既有约定一致。API 全部线程安全（维度目录 + 文件粒度锁）。
 
 ### 消费端语义与预算

@@ -84,3 +84,13 @@
 - 给定 backfill 线程正在 sleep 周期中被 stop，那么 ≤2s 内退出且不再有 putRegion 落盘。
 
 **验证**：`ModLifecycleTest#stopOrderStreamerBackfillDrain`
+
+### REQ-MS-009 区域重放：lastSentXor 全量复位（region_replay_on_start）
+
+**SHALL**：`MapStore.resetLastSentXor()` 必须遍历 `listDimensions()` 的每个维度、`listRegions(dim)` 的每个区域，经 `markSent(dim, rx, rz, 0)` 原地把各 `.qms` 文件头的 u32 `lastSentXor` 写 0（只动该字段：xor32/mtimeMillis/压缩负载逐字节不变），返回复位的区域数量；幂等可重复调用，一切 IO 异常沿用 markSent 吞 FINE 语义不外抛。lifecycle（`ModLifecycle.startMapStoreEngines`，lead 接线）当配置键 `region_replay_on_start=true`（REQ-CFG-005，默认 false）时，必须在创建 RegionStreamer 之前每会话调用一次，并以 info 日志记录复位数量；此后 REQ-MS-007 去重门视全部区域为未发送并按令牌桶限速重放。边界：`xor32==0` 的区域复位后仍被去重门跳过（与 REQ-MS-005 刚写入 lastSentXor=0 的语义一致，全 0 区域本就无内容）。
+
+**场景**：
+- 给定两维度若干区域全部 putRegion 并逐个 markSent，当 resetLastSentXor，那么返回值==区域总数；重读各头 lastSentXor==0 且 xor32/mtime 不变、readRegion 逐字节不变；再调一次数量与头状态不变（幂等）。
+- 给定 3 个区域已全部 markSent（xor≠0），当 resetLastSentXor 后跑一轮 streamOnce，那么 3 个区域全部被重发且发送后 listRegions 三者 xor==lastSentXor；再跑一轮零发送。
+
+**验证**：`MapStoreTest#resetLastSentXorClearsMarkersOnly`、`RegionStreamerTest#replayAfterResetResendsAllRegions`、`ModLifecycleTest#replayOnStartResetsBeforeStreamer`

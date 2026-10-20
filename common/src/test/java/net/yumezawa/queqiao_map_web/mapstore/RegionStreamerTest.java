@@ -134,4 +134,51 @@ class RegionStreamerTest {
                 "压缩字节 " + compressed + "B @4096B/s 下限 " + (compressed * 1000L / 4096L) + "ms，实测 " + elapsedMs + "ms");
         assertEquals(2, sink.subTypes().stream().filter(s -> s.equals("map_region")).count());
     }
+
+    @Test
+    @Tag("REQ-MS-009")
+    @DisplayName("resetLastSentXor 后一轮 streamOnce 全量重发 3 区域并再 markSent；二轮零发送")
+    void replayAfterResetResendsAllRegions() {
+        MapStore store = new MapStore(dir);
+        // solid() 已翻位保证 xor≠0：复位后三个区域都应被去重门放行
+        store.putRegion(DIM, 0, 0, solid(0x3f76e4));
+        store.putRegion(DIM, 1, 0, solid(0x8e44ad));
+        store.putRegion(DIM, 2, 0, solid(0x2ecc71));
+        for (int rx = 0; rx <= 2; rx++) {
+            store.markSent(DIM, rx, 0, store.header(DIM, rx, 0).xor32());
+        }
+        // 默认配置：region_stream_bytes_per_sec=65536、max=4（纯色 pal8 压缩后每区域仅数 KB）
+        MapExtConfig c = MapExtConfig.load(dir.resolve("queqiao_map_web.yml")); // 缺文件 → 全默认
+        Palette palette = new Palette();
+        FakePlatformAdapter adapter = new FakePlatformAdapter();
+        RecordingEventSink sink = new RecordingEventSink(true, true);
+        AtomicReference<EventSink> ref = new AtomicReference<>(sink);
+        TileQueue tileQueue = new TileQueue(adapter, c, palette, ref::get, null);
+        RegionStreamer streamer = new RegionStreamer(store, tileQueue, palette, c, ref::get);
+
+        assertEquals(0, streamer.streamOnce(), "复位前全部 xor==lastSentXor → 零发送");
+
+        assertEquals(3, store.resetLastSentXor(), "复位数量应为全部 3 个区域");
+        for (MapStore.RegionInfo info : store.listRegions(DIM)) {
+            assertEquals(0, info.lastSentXor(), "复位后头 lastSentXor 应为 0");
+        }
+
+        assertEquals(3, streamer.streamOnce(), "复位后一轮巡检把 xor≠0 的区域全部重发（默认每事件 ≤4 → 单事件 3 区域）");
+        List<String> subs = sink.subTypes();
+        assertEquals(1, subs.stream().filter(s -> s.equals("map_region")).count(), "重发只产生一个 map_region 事件");
+        MapRegionEvent ev = (MapRegionEvent) sink.sent.get(subs.lastIndexOf("map_region"));
+        assertEquals(DIM, ev.getDimension());
+        assertEquals(3, ev.getRegions().size(), "事件应一次覆盖 3 个区域");
+        boolean[] seenRx = new boolean[3];
+        for (RegionPayloadModel p : ev.getRegions()) {
+            assertTrue(p.getRz() == 0 && p.getRx() >= 0 && p.getRx() <= 2, "区域坐标应为 rx0/1/2、rz0");
+            seenRx[p.getRx()] = true;
+        }
+        assertTrue(seenRx[0] && seenRx[1] && seenRx[2], "map_region 事件必须覆盖 rx=0/1/2");
+        for (MapStore.RegionInfo info : store.listRegions(DIM)) {
+            assertEquals(info.xor32(), info.lastSentXor(), "发送成功后重新 markSent（去重门下一轮生效）");
+        }
+
+        assertEquals(0, streamer.streamOnce(), "二轮巡检全部 xor==lastSentXor → 零发送");
+    }
 }

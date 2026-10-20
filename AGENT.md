@@ -103,7 +103,7 @@ gradlew :common:test      &REM JUnit5 单元 + 冒烟测试（common/src/test）
 | 事件类 | sub_type | 载荷要点 |
 |---|---|---|
 | PlayerMoveEvent | player_move | players[]: uuid/nickname/x/y/z/yaw/dimension（批量，非逐人一条） |
-| MapPaletteEvent | map_palette | id + colors[]（≤256，下标0=未设置；先于任何瓦片；发一次后冻结） |
+| MapPaletteEvent | map_palette | id + colors[]（≤256，下标0=未设置；先于任何瓦片；发一次后冻结；已发布后按 palette_republish_interval_ms 周期重发同一快照，REQ-PAL-003 晚接入自愈） |
 | MapTileEvent | map_tile | dimension + tiles[]: cx/cz(瓦片左上区块坐标)/size(1或8)/format=zlib-pal8/sha1/b64 |
 | MapRegionEvent | map_region | dimension + regions[]: rx/rz(MC 区域坐标，每区域 32×32 区块=512×512 像素)/format=zlib-pal8/xor(Xaero 式库内容校验，断点续传)/sha1/b64 |
 | MapDimensionsEvent | map_dimensions | dimensions[]（连接后一次 + 清单变化重发） |
@@ -147,7 +147,7 @@ CI/CD 暂停中：workflow 移入 `.github/workflows.disabled/`，GitHub Actions
   - 历史明细（Heightmap -1、drain 失败出口、addListener 误报驳回、依赖基线 queqiao≥0.5.0 `929453f` 与「勿引入缺席探针」规则 §4.10）：见 git log 与 §6 矩阵
 - **阶段二 ← 当前目标：接口契约与三方接入固化**
   - 契约固化（SDD）：五事件 DTO 字段基线只增不改不删（ProtocolBaselineTest / REQ-PROTO-004）；格式令牌语义（`zlib-pal8`、sha1、xor）冻结入 specs；破坏性协议变更必须走新 sub_type / 新格式
-  - 接入固化（TDD 端到端验收）：runServer + 鹊桥 + 消费端按 `docs/INTEGRATION.md` §9.2 对 5 个 sub_type 全量解析验收；跨重启 xor 续传、多连接幂等（服务端 sha1/xor 去重）、调色板 `(server_name, id)` 落盘；§9.3 时序表+排错清单即验收脚本
+  - 接入固化（TDD 端到端验收）：runServer + 鹊桥 + 消费端按 `docs/INTEGRATION.md` §9.2 对 5 个 sub_type 全量解析验收；跨重启 xor 续传、多连接幂等（服务端 sha1/xor 去重）、调色板 `(server_name, id)` 落盘 + 周期重发自愈（REQ-PAL-003）、region_replay_on_start 全量重放验收（REQ-MS-009）；§9.3 时序表+排错清单即验收脚本
   - 门禁：本地四项全绿 + REQ↔@Tag 双向覆盖空 diff（workflow spec-coverage 步骤的本地镜像）
 - **阶段三 多平台扩展**：Fabric 1.20.1（fabric-loom 接入编译、放开 settings include、核对版本覆盖层 TODO）与 NeoForge 1.21.1 / 26.1（填 neo_version TODO）；平台特有行为先进 specs 立 REQ；适配器契约场景（5 事件、维度 registry key、worldSaveRoot 语义）每平台跑通同一组 REQ；复核 §6 矩阵 eventbus `addListener` 校验点
 - **阶段四 开源与 CI/CD 恢复**：LICENSE / README 终稿；`.github/workflows.disabled/` 移回并在新 `v*` 标签重发 Release（v0.0.1 的 Release 与 tag 已撤，留档 SHA a462a73 可重建）

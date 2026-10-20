@@ -49,6 +49,10 @@ public final class MapExtConfig {
     public int regionStreamBytesPerSec = 65536;
     /** 单个 map_region 事件区域数上限（钳制 1..16） */
     public int regionStreamMaxRegionsPerEvent = 4;
+    /** 已发布调色板的周期重发间隔毫秒（REQ-CFG-005/REQ-PAL-003）：0=关闭重发，其余钳制 ≥1000 */
+    public long paletteRepublishIntervalMs = 10000;
+    /** 区域重放开关（REQ-CFG-005/REQ-MS-009）：true=就绪首 tick 区域流启动前全库 lastSentXor 归零重放 */
+    public boolean regionReplayOnStart = false;
 
     private static final Logger LOG = Logger.getLogger("queqiao_map_web.config");
 
@@ -105,6 +109,11 @@ public final class MapExtConfig {
                 case "region_stream_enabled" -> regionStreamEnabled = Boolean.parseBoolean(val);
                 case "region_stream_bytes_per_sec" -> regionStreamBytesPerSec = Math.max(4096, Integer.parseInt(val));
                 case "region_stream_max_regions_per_event" -> regionStreamMaxRegionsPerEvent = Math.min(16, Math.max(1, Integer.parseInt(val)));
+                case "palette_republish_interval_ms" -> {
+                    long v = Long.parseLong(val);
+                    paletteRepublishIntervalMs = (v == 0) ? 0 : Math.max(1000, v);
+                }
+                case "region_replay_on_start" -> regionReplayOnStart = Boolean.parseBoolean(val);
                 default -> {
                 }
             }
@@ -133,5 +142,9 @@ public final class MapExtConfig {
             region_stream_enabled: true
             region_stream_bytes_per_sec: 65536
             region_stream_max_regions_per_event: 4
+            # 调色板周期重发：首发成功后按该间隔重发同一 id+colors 快照（晚接入/断线重连消费者自愈）；0=关闭
+            palette_republish_interval_ms: 10000
+            # 区域重放：true=本会话区域流启动前把全部 .qms 的 lastSentXor 归零、全量重放（一次性自愈，用完改回 false）
+            region_replay_on_start: false
             """;
 }

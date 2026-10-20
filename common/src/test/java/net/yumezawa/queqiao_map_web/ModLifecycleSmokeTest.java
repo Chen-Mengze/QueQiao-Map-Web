@@ -273,4 +273,42 @@ class ModLifecycleSmokeTest {
         assertNull(lifecycle.regionStreamer());
         assertDoesNotThrow(() -> lifecycle.stop());
     }
+
+    @Test
+    @Order(7)
+    @Tag("REQ-PAL-003")
+    @DisplayName("调色板周期重发接线：间隔到点后的 tick 重发同一 id+colors 快照（晚接入自愈）；未到点不重发；0=关闭零重发")
+    void paletteRepublishedEveryInterval() throws Exception {
+        writeConfig("enabled: true", "batch_size: 4", "palette_republish_interval_ms: 1000");
+        lifecycle.start(adapter, dir);
+        RecordingEventSink sink = injectSink(true, true);
+        enqueue4Chunks();
+        adapter.tickConsumer.accept(List.of()); // 首个就绪 tick：首发调色板 + map_tile + map_dimensions
+        assertEquals(List.of("map_palette", "map_tile", "map_dimensions"), sink.subTypes());
+        MapPaletteEvent first = (MapPaletteEvent) sink.sent.get(0);
+        int afterFirst = sink.sent.size();
+        adapter.tickConsumer.accept(List.of());
+        assertEquals(afterFirst, sink.sent.size(), "未到重发间隔 → 无新事件（队列空、维度未变、间隔未到）");
+        Thread.sleep(1100);
+        adapter.tickConsumer.accept(List.of());
+        assertEquals(afterFirst + 1, sink.sent.size(), "间隔到点 → 恰好重发一次");
+        MapPaletteEvent again = (MapPaletteEvent) sink.sent.get(sink.sent.size() - 1);
+        assertEquals("map_palette", again.getSubType());
+        assertEquals(first.getId(), again.getId(), "重发同 palette_id");
+        assertEquals(first.getColors(), again.getColors(), "重发快照 colors 逐一相同（消费端幂等前提）");
+        assertDoesNotThrow(() -> lifecycle.stop());
+
+        // 0 = 关闭：palette_republish_interval_ms=0 → 任何 tick 都不得周期重发，全场恰一次首发
+        adapter = new FakePlatformAdapter();
+        adapter.solidChunk(0x3f76e4);
+        writeConfig("enabled: true", "batch_size: 4", "palette_republish_interval_ms: 0");
+        lifecycle.start(adapter, dir);
+        RecordingEventSink offSink = injectSink(true, true);
+        enqueue4Chunks();
+        adapter.tickConsumer.accept(List.of());
+        adapter.tickConsumer.accept(List.of());
+        assertEquals(1, offSink.subTypes().stream().filter(s -> s.equals("map_palette")).count(),
+                "palette_republish_interval_ms=0 → 周期重发关闭");
+        assertDoesNotThrow(() -> lifecycle.stop());
+    }
 }

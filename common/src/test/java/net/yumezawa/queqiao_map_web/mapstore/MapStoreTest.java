@@ -1,5 +1,6 @@
 package net.yumezawa.queqiao_map_web.mapstore;
 
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -9,6 +10,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.FileTime;
+import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
@@ -171,5 +173,68 @@ class MapStoreTest {
         // 目标不存在：吞异常、不建文件
         store.markSent("minecraft:overworld", 7, 7, 1);
         assertNull(store.header("minecraft:overworld", 7, 7));
+    }
+
+    @Test
+    @Tag("REQ-MS-009")
+    @DisplayName("resetLastSentXor：两维度全部区域 lastSentXor 归 0，xor32/mtime/负载逐字节不变，幂等可重复调")
+    void resetLastSentXorClearsMarkersOnly(@TempDir Path world) {
+        MapStore store = new MapStore(world);
+        String dim1 = "minecraft:overworld";
+        String dim2 = "quchao:test_dim";
+        int[][] coords1 = {{0, 0}, {1, 0}, {-2, 3}};
+        int[][] coords2 = {{-1, 0}, {5, -4}};
+        String[] dims = {dim1, dim2};
+        int[][][] allCoords = {coords1, coords2};
+
+        // 播种：两维度各若干区域，逐个 putRegion 后 markSent(xor32)
+        List<int[]> seeded = new ArrayList<>(); // {dimIndex, rx, rz}
+        byte[] payload = patternPayload();
+        for (int d = 0; d < 2; d++) {
+            for (int[] c : allCoords[d]) {
+                store.putRegion(dims[d], c[0], c[1], payload);
+                MapStore.Header h = store.header(dims[d], c[0], c[1]);
+                assertNotNull(h, "putRegion 后头应可读");
+                store.markSent(dims[d], c[0], c[1], h.xor32());
+                seeded.add(new int[]{d, c[0], c[1]});
+            }
+        }
+
+        // 复位前：记录各 header 的 xor32/mtime，确认已全部 markSent
+        MapStore.Header[] before = new MapStore.Header[seeded.size()];
+        for (int i = 0; i < seeded.size(); i++) {
+            int[] s = seeded.get(i);
+            MapStore.Header h = store.header(dims[s[0]], s[1], s[2]);
+            assertNotNull(h);
+            assertEquals(h.xor32(), h.lastSentXor(), "复位前应已全部 markSent（xor==lastSent）");
+            before[i] = h;
+        }
+
+        // 复位：返回值 == 区域总数
+        int total = seeded.size();
+        assertEquals(total, store.resetLastSentXor(), "返回值应为两维度复位的区域总数");
+
+        // 复位后：lastSentXor==0，xor32/mtime 不变，readRegion 逐字节不变
+        for (int i = 0; i < seeded.size(); i++) {
+            int[] s = seeded.get(i);
+            String dim = dims[s[0]];
+            MapStore.Header h = store.header(dim, s[1], s[2]);
+            assertNotNull(h);
+            assertEquals(0, h.lastSentXor(), "复位后 lastSentXor 应为 0");
+            assertEquals(before[i].xor32(), h.xor32(), "复位不得触碰 xor32");
+            assertEquals(before[i].mtimeMillis(), h.mtimeMillis(), "复位原地改写，mtime 保持");
+            assertArrayEquals(payload, store.readRegion(dim, s[1], s[2]), "压缩负载应逐字节不变");
+        }
+
+        // 幂等：再调一次，数量与头状态不变
+        assertEquals(total, store.resetLastSentXor(), "复位幂等，可重复调用");
+        for (int i = 0; i < seeded.size(); i++) {
+            int[] s = seeded.get(i);
+            MapStore.Header h = store.header(dims[s[0]], s[1], s[2]);
+            assertNotNull(h);
+            assertEquals(0, h.lastSentXor());
+            assertEquals(before[i].xor32(), h.xor32());
+            assertEquals(before[i].mtimeMillis(), h.mtimeMillis());
+        }
     }
 }

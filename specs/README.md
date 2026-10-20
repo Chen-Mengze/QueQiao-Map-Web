@@ -23,11 +23,11 @@
 | 域目录 | spec 文件 | REQ 段 | 覆盖内容 |
 |---|---|---|---|
 | lifecycle | [lifecycle/spec.md](lifecycle/spec.md) | REQ-LIFE-001…005 | 装配与生命周期、静默门、停服顺序、异常吞噬 |
-| config | [config/spec.md](config/spec.md) | REQ-CFG-001…004 | queqiao_map_web.yml 生成 / 极简解析 / 非法值回退 |
+| config | [config/spec.md](config/spec.md) | REQ-CFG-001…005 | queqiao_map_web.yml 生成 / 极简解析 / 非法值回退 |
 | sampler | [sampler/spec.md](sampler/spec.md) | REQ-SAMP-001…004 | 位移阈值、静止心跳、移动限速、离线清理 |
-| palette | [palette/spec.md](palette/spec.md) | REQ-PAL-001…002 | 256 色上限与下标 0、先发后冻结 |
+| palette | [palette/spec.md](palette/spec.md) | REQ-PAL-001…003 | 256 色上限与下标 0、先发后冻结 |
 | tile | [tile/spec.md](tile/spec.md) | REQ-TILE-001…006 | 8×8 合并、zlib-pal8+sha1、去重、队列封顶、每 tick 渲染上限 |
-| mapstore | [mapstore/spec.md](mapstore/spec.md) | REQ-MS-001…008 | mca 解码、本地二维库、回填、区域流 |
+| mapstore | [mapstore/spec.md](mapstore/spec.md) | REQ-MS-001…009 | mca 解码、本地二维库、回填、区域流 |
 | sender | [sender/spec.md](sender/spec.md) | REQ-SEND-001…002 | GlobalContext 单文件守卫、未就绪零发送 |
 | protocol | [protocol/spec.md](protocol/spec.md) | REQ-PROTO-001…005 | sub_type 固定、DTO 字段名、registry key、只加不改 |
 | artifact | [artifact/spec.md](artifact/spec.md) | REQ-ART-001…004 | 模板 token 渲染、jar 内容、manifest、产物命名 |

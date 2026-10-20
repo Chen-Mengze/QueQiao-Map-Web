@@ -1,6 +1,7 @@
 package net.yumezawa.queqiao_map_web.tile;
 
 import net.yumezawa.queqiao_map_web.config.MapExtConfig;
+import net.yumezawa.queqiao_map_web.event.MapPaletteEvent;
 import net.yumezawa.queqiao_map_web.event.MapTileEvent;
 import net.yumezawa.queqiao_map_web.mapstore.MapStore;
 import net.yumezawa.queqiao_map_web.model.TilePayloadModel;
@@ -73,6 +74,12 @@ class TileQueueTest {
     private static List<MapTileEvent> tileEvents(RecordingEventSink s) {
         List<MapTileEvent> out = new ArrayList<>();
         for (var e : s.sent) if (e instanceof MapTileEvent t) out.add(t);
+        return out;
+    }
+
+    private static List<MapPaletteEvent> paletteEvents(RecordingEventSink s) {
+        List<MapPaletteEvent> out = new ArrayList<>();
+        for (var e : s.sent) if (e instanceof MapPaletteEvent p) out.add(p);
         return out;
     }
 
@@ -249,5 +256,39 @@ class TileQueueTest {
         RecordingEventSink second = new RecordingEventSink(true, true);
         assertTrue(q.publishPalette(second), "已发布 → 幂等返回 true");
         assertTrue(second.sent.isEmpty(), "重复 publishPalette 不再发 MapPaletteEvent");
+    }
+
+    @Test
+    @Tag("REQ-PAL-003")
+    @DisplayName("首发前 republishPalette 返回 false 零事件；首发后重发事件 id/colors 与首发逐一相同且不改发布/冻结态；send 恒 false 时重发返回 false")
+    void republishPaletteOnlyAfterFirstPublishWithIdenticalSnapshot() throws IOException {
+        TileQueue q = newQueue(cfg("batch_size: 4"));
+        // ① 首发成功前禁止重发：返回 false 且零事件（防把未注册真实色的半空调色板发出并冻结）
+        assertFalse(q.republishPalette(okSink), "首发未成功 → republishPalette 必须返回 false");
+        assertTrue(okSink.sent.isEmpty(), "首发前重发必须零事件");
+        assertFalse(q.palettePublished(), "重发尝试不影响首发状态");
+        // ② 一次 flush 令首发成功，记下首个 MapPaletteEvent 的 id 与 colors 快照
+        enqueueChunks(q, 0, 0, 1, 0, 0, 1, 1, 1);
+        q.onTick(System.currentTimeMillis() + 10_000);
+        assertTrue(q.palettePublished(), "flush 成功 → 调色板已首发");
+        MapPaletteEvent first = paletteEvents(okSink).get(0);
+        String firstId = first.getId();
+        List<String> firstColors = first.getColors();
+        // ③ 再重发两次：均成功，新增 MapPaletteEvent 的 id 与 colors 与首发逐一相同
+        assertTrue(q.republishPalette(okSink), "已首发 → 重发成功（第 1 次）");
+        assertTrue(q.republishPalette(okSink), "已首发 → 重发成功（第 2 次）");
+        List<MapPaletteEvent> palettes = paletteEvents(okSink);
+        assertEquals(3, palettes.size(), "首发 1 条 + 重发 2 条");
+        for (int i = 1; i < palettes.size(); i++) {
+            assertEquals(firstId, palettes.get(i).getId(), "重发事件 id 与首发一致");
+            assertEquals(firstColors, palettes.get(i).getColors(), "重发事件 colors 与首发逐一相同");
+        }
+        // ④ 重发不改变 palettePublished 与调色板冻结态
+        assertTrue(q.palettePublished(), "重发后 palettePublished 仍为 true");
+        assertTrue(palette.isFrozen(), "重发后 Palette 仍冻结");
+        // ⑤ 通道失败：send 恒 false 的 sink 上重发返回 false（首发状态不受影响）
+        RecordingEventSink failing = new RecordingEventSink(true, false);
+        assertFalse(q.republishPalette(failing), "send 恒 false → republishPalette 返回 false");
+        assertTrue(q.palettePublished(), "重发失败不改变已发布状态");
     }
 }

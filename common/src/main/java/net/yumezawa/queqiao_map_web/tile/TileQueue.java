@@ -27,6 +27,7 @@ import java.util.logging.Logger;
  * 量化/压缩/发送只在 runAsync 后台线程跑——后台线程绝不触碰 Level/Chunk 对象。
  * MapPaletteEvent 必须先于任何 MapTileEvent（发送顺序）：首次刷写先打包量化
  * （pack 把颜色注册进调色板），再发调色板快照并冻结，最后发瓦片；调色板发送失败则本批退回队列。
+ * 调色板快照经 publishPalette 首发一次后内容冻结；晚接入消费者的自愈靠 republishPalette 按周期重发同一快照（消费端对同 id+colors 幂等）。
  *
  * 线程安全：pending / flushing / paletteSent / capWarned 跨线程共享——
  * 主线程（enqueue / onTick / drain）与后台 flush 线程（发送失败后的 requeue、调色板标记）
@@ -87,7 +88,8 @@ public final class TileQueue {
     }
 
     /**
-     * 发调色板快照并冻结（顺序铁律：palette 先于任何 map_tile/map_region），只发一次。
+     * 首发调色板快照并冻结（顺序铁律：palette 先于任何 map_tile/map_region）：首发只发一次，
+     * 此后的周期重发走 republishPalette。
      * 已发过直接返回 true；发送失败返回 false 且不置位（下次再试）。
      * flush 内部调用；RegionStreamer（后台线程）发任何区域前也必须先过本门。
      */
@@ -99,6 +101,24 @@ public final class TileQueue {
             paletteSent = true;
             palette.freeze();
             return true;
+        }
+    }
+
+    /**
+     * 重发已发布的调色板快照：晚接入消费者（消费端中途接入，如 AstrBot 插件）的自愈通道。
+     * 快照与首发完全一致——同一 config.paletteId + 冻结后的 palette.colors()，
+     * 消费端对同 id+同 colors 幂等，重复收到无副作用。
+     * 首发（publishPalette）成功前禁止重发：否则会发出未注册真实色的半空调色板并被冻结。
+     * 不改变 paletteSent 与冻结态，也不影响 publishPalette / palettePublished 的既有语义；
+     * 重发节奏由 ModLifecycle 按 palette_republish_interval_ms 周期调度（他人实现），本方法只执行一次重发。
+     *
+     * @return true = 已首发且本次 send 成功；false = 尚未首发（零事件）或本次 send 失败
+     */
+    public boolean republishPalette(EventSink sink) {
+        synchronized (lock) {
+            // 首发未成功：调色板可能尚未注册真实色，重发会冻结半空调色板——直接拒绝，零事件
+            if (!paletteSent) return false;
+            return sink.send(new MapPaletteEvent(config.paletteId, palette.colors()));
         }
     }
 

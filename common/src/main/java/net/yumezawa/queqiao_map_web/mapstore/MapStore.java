@@ -253,6 +253,30 @@ public final class MapStore {
     }
 
     /**
+     * 区域重放复位：把全部区域打回「未发送」态，供 {@code region_replay_on_start}
+     * 在区域流启动前调用一次。
+     *
+     * <p>遍历 {@link #listDimensions()} 的每个维度、{@link #listRegions(String)} 的每个区域，
+     * 对每个调用 {@code markSent(dim, rx, rz, 0)}（复用既有原地改写头偏移 11 的 u32，
+     * 只动 lastSentXor；xor32/mtime/负载不动），返回复位过的区域数量。幂等，可重复调用。</p>
+     *
+     * <p>边界：xor32==0 的区域复位后仍会被 RegionStreamer 去重门跳过
+     * （与 REQ-MS-005 刚写入 lastSentXor=0 的语义一致，全 0 区域本就无内容）。</p>
+     *
+     * <p>一切 IO 异常沿用 {@link #markSent} 吞 FINE 语义，不外抛。</p>
+     */
+    public int resetLastSentXor() {
+        int count = 0;
+        for (String dim : listDimensions()) {
+            for (RegionInfo info : listRegions(dim)) {
+                markSent(dim, info.rx(), info.rz(), 0);
+                count++;
+            }
+        }
+        return count;
+    }
+
+    /**
      * mca 文件是否比 store 中该区域更新（回填增量判定）。
      * store 无该区域 → true（必须处理）；mca 无法 stat → false（跳过，下轮再查）。
      */

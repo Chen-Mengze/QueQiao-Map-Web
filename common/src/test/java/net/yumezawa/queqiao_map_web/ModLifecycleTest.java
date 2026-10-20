@@ -2,6 +2,7 @@ package net.yumezawa.queqiao_map_web;
 
 import com.github.theword.queqiao.tool.event.base.BaseEvent;
 import net.yumezawa.queqiao_map_web.config.MapExtConfig;
+import net.yumezawa.queqiao_map_web.event.MapRegionEvent;
 import net.yumezawa.queqiao_map_web.mapstore.BackfillEngine;
 import net.yumezawa.queqiao_map_web.mapstore.MapStore;
 import net.yumezawa.queqiao_map_web.mapstore.RegionStreamer;
@@ -24,7 +25,9 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -108,6 +111,14 @@ class ModLifecycleTest {
                 return out;
             }
         }
+
+        List<MapRegionEvent> regionEvents() {
+            synchronized (sent) {
+                List<MapRegionEvent> out = new ArrayList<>();
+                for (BaseEvent e : sent) if (e instanceof MapRegionEvent r) out.add(r);
+                return out;
+            }
+        }
     }
 
     @Test
@@ -175,5 +186,52 @@ class ModLifecycleTest {
         int firstPalette = seq.indexOf("map_palette");
         int firstRegion = seq.indexOf("map_region");
         if (firstRegion >= 0) assertTrue(firstPalette < firstRegion, "map_palette 先于 map_region");
+    }
+
+    @Test
+    @Tag("REQ-MS-009")
+    @Tag("REQ-LIFE-005")
+    @DisplayName("region_replay_on_start=true：就绪首 tick 在区域流启动前全库 lastSentXor 归零；消费端离线期间已确认的 3 区域全部限速重放")
+    void replayOnStartResetsBeforeStreamer() throws Exception {
+        // 播种「已发送」态区域：不开重放则 REQ-MS-007 去重门永不重发（本次修复针对的烧档场景）
+        adapter.worldSaveRootDir = dir;
+        MapStore seed = new MapStore(dir);
+        byte[] blue = new byte[MapStore.PAYLOAD_BYTES];
+        for (int i = 0; i < blue.length; i += 3) {
+            blue[i] = 0x3f;
+            blue[i + 1] = 0x76;
+            blue[i + 2] = (byte) 0xe4;
+        }
+        blue[1] ^= 0x01; // 翻一位使 xor≠0（xor32==0 区域复位后仍被去重门跳过——REQ-MS-009 边界）
+        for (int rx = 0; rx < 3; rx++) {
+            seed.putRegion(DIM, rx, 0, blue);
+            seed.markSent(DIM, rx, 0, seed.header(DIM, rx, 0).xor32());
+        }
+
+        writeConfig("enabled: true", "backfill_enabled: false",
+                "region_replay_on_start: true",
+                "region_stream_max_regions_per_event: 1");
+        lifecycle.start(adapter, dir);
+        ConcurrentRecordingSink sink = new ConcurrentRecordingSink();
+        sinkRef().set(sink);
+        adapter.tickConsumer.accept(List.of()); // 就绪首 tick：startMapStoreEngines 同步复位 lastSentXor → 区域流启动
+        assertNotNull(lifecycle.regionStreamer(), "region_stream_enabled 默认 true → 已启动");
+
+        List<MapRegionEvent> replayed = List.of();
+        long deadline = System.currentTimeMillis() + 12_000; // 令牌桶首秒空桶：首轮 acquire 约 1s
+        while (System.currentTimeMillis() < deadline) {
+            replayed = sink.regionEvents();
+            if (replayed.size() >= 3) break;
+            Thread.sleep(200);
+        }
+        assertTrue(replayed.size() >= 3, "3 个已确认区域全部重放（每事件 1 个），实际 " + replayed.size());
+        Set<Integer> rxs = new HashSet<>();
+        for (MapRegionEvent ev : replayed) for (var p : ev.getRegions()) rxs.add(p.getRx());
+        assertEquals(Set.of(0, 1, 2), rxs, "重放覆盖全部播种区域");
+        for (MapStore.RegionInfo info : seed.listRegions(DIM))
+            assertEquals(info.xor32(), info.lastSentXor(), "重发成功后去重门重新闭合（重新 markSent）");
+        assertEquals(1, sink.subTypes().stream().filter(s -> s.equals("map_palette")).count(),
+                "重放不破顺序铁律：全场恰一次调色板首发（默认 10s 周期重发未到点）");
+        assertDoesNotThrow(() -> lifecycle.stop());
     }
 }

@@ -40,3 +40,14 @@
 - 给定 `region_stream_bytes_per_sec: abc`，那么保持默认 65536，无异常。
 
 **验证**：`MapExtConfigTest#newMapStoreKeysParsed`、`MapExtConfigTest#newMapStoreKeysClamped`
+
+### REQ-CFG-005 晚接入自愈两键（palette_republish_interval_ms / region_replay_on_start）
+
+**SHALL**：在 REQ-CFG-002/004 列举之外，识别键再增：`palette_republish_interval_ms`（默认 **10000**，毫秒——已发布调色板的周期重发间隔（REQ-PAL-003 发送节奏源）；`0`=关闭重发；其余值钳制 ≥1000）与 `region_replay_on_start`（默认 **false**；true=鹊桥就绪首 tick、区域流启动前把本地库全部 `.qms` 的 lastSentXor 归零并全量重放区域，REQ-MS-009）。缺文件写出的 DEFAULT_YML 模板必须包含这两个键（注释风格同既有键）；数值解析失败保持默认（REQ-CFG-003 语义同样适用）；布尔键按 `Boolean.parseBoolean` 语义（非 "true" 即 false）。两键语义的实现本体分属 palette/mapstore/lifecycle 域，config 域只约束解析与默认。
+
+**场景**：
+- 给定缺文件，那么默认 paletteRepublishIntervalMs=10000、regionReplayOnStart=false，且 DEFAULT_YML 含两键。
+- 给定 `palette_republish_interval_ms: 100`，那么钳制为 1000；给定 `: 0`，那么 0（关闭）；给定 `: abc`，那么保持默认 10000。
+- 给定 `region_replay_on_start: true`，那么 true 生效；`nope` 按 parseBoolean 语义为 false。
+
+**验证**：`MapExtConfigTest#lateJoinSelfHealKeysParsed`

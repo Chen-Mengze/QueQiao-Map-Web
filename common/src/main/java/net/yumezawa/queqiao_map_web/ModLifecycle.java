@@ -54,6 +54,7 @@ public final class ModLifecycle {
     private boolean bridgeReadyLogged;
     private List<String> lastDimensions = List.of();
     private long lastDimensionCheckMs;
+    private long lastPaletteRepublishMs;
 
     private ModLifecycle() {
     }
@@ -96,6 +97,7 @@ public final class ModLifecycle {
 
         running = true;
         lastDimensionCheckMs = 0;
+        lastPaletteRepublishMs = System.currentTimeMillis(); // 周期重发计时起点（REQ-PAL-003）
         // 单例跨服务端重启复用：维度清单基线必须清空——新会话（新 sink）里
         // 若与上个会话比对相等，map_dimensions 永远不会重发，Web 端缺清单
         lastDimensions = List.of();
@@ -171,6 +173,14 @@ public final class ModLifecycle {
                     if (regionStreamer != null) regionStreamer.requestRecheck();
                 }
             }
+
+            // 已发布调色板的周期重发（REQ-PAL-003）：晚接入/断线重连消费端的自愈通道——
+            // 同一 id+colors 快照，消费端幂等；palette_republish_interval_ms=0 关闭（REQ-CFG-005）
+            if (config.paletteRepublishIntervalMs > 0 && tileQueue.palettePublished()
+                    && now - lastPaletteRepublishMs >= config.paletteRepublishIntervalMs) {
+                lastPaletteRepublishMs = now;
+                tileQueue.republishPalette(sink);
+            }
         } catch (Throwable t) {
             LOG.log(Level.FINE, "tick 处理异常（已吞掉，不影响服务端）", t);
         }
@@ -186,6 +196,13 @@ public final class ModLifecycle {
                 backfillEngine.start();
             }
             if (config.regionStreamEnabled) {
+                // 区域重放开关（REQ-MS-009/REQ-CFG-005）：区域流启动前把全库 lastSentXor 归零，
+                // 消费端离线期间已「烧掉」的区域本会话限速重放一遍；xor32==0 区域维持跳过
+                if (config.regionReplayOnStart) {
+                    int replayCount = mapStore.resetLastSentXor();
+                    LOG.info("[" + MOD_ID + "] region_replay_on_start=true：已复位 " + replayCount
+                            + " 个区域的 lastSentXor，本会话按区域流限速全量重放（一次性自愈，用完建议改回 false）。");
+                }
                 regionStreamer = new RegionStreamer(mapStore, tileQueue, palette, config, sinkRef::get);
                 regionStreamer.start();
             }
