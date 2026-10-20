@@ -4,7 +4,7 @@ pluginManagement {
         maven { url = 'https://maven.aliyun.com/repository/gradle-plugin' }
         maven { url = 'https://maven.aliyun.com/repository/public' }
         gradlePluginPortal()
-        // M4(NeoForge) 需要时再放开，配代理使用：maven { url = 'https://maven.neoforged.net/releases' }
+        // 接入 NeoForge 时再放开，配代理使用：maven { url = 'https://maven.neoforged.net/releases' }
     }
 }
 
@@ -15,8 +15,8 @@ plugins {
 rootProject.name = 'queqiao_map_web'
 
 include 'common'          // 主结构：与 MC 无关（多加载器标准名）
-include 'forge'           // M1：Forge 1.20.1（当前唯一接入编译的平台）
+include 'forge'           // Forge 1.20.1（当前唯一接入编译的平台）
 
-// 后续里程碑放开（见 AGENT.md）：
-// include 'fabric'          // M2/M3：还需 fabric/build.gradle（fabric-loom）
-// include 'neoforge'        // M4：还需 neoforge/build.gradle（ModDevGradle）
+// 接入新加载器时放开（阶段三，见 AGENT.md §7）：
+// include 'fabric'          // 还需 fabric/build.gradle（fabric-loom）
+// include 'neoforge'        // 还需 neoforge/build.gradle（ModDevGradle）
