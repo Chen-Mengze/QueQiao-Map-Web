@@ -24,14 +24,6 @@ public final class PlayerPosModel {
         this.dimension = dimension;
     }
 
-    public String getUuid() {
-        return uuid;
-    }
-
-    public String getNickname() {
-        return nickname;
-    }
-
     public double getX() {
         return x;
     }
@@ -42,10 +34,6 @@ public final class PlayerPosModel {
 
     public double getZ() {
         return z;
-    }
-
-    public float getYaw() {
-        return yaw;
     }
 
     public String getDimension() {

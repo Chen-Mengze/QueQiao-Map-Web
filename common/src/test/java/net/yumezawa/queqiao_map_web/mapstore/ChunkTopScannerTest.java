@@ -3,7 +3,6 @@ package net.yumezawa.queqiao_map_web.mapstore;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
-import java.io.IOException;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;

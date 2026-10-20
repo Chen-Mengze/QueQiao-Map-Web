@@ -1,10 +1,8 @@
 package net.yumezawa.queqiao_map_web.tile;
 
 import net.yumezawa.queqiao_map_web.model.TilePayloadModel;
-import net.yumezawa.queqiao_map_web.platform.PlatformAdapter.ChunkPos;
 
 import java.io.ByteArrayOutputStream;
-import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.Base64;

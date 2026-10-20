@@ -25,7 +25,7 @@ import java.util.zip.Deflater;
  * TileQueue.publishPalette 补发（顺序铁律：palette 先于任何 map_region）。
  * 节流（REQ-MS-007）：令牌桶按【压缩字节】regionStreamBytesPerSec（≥4096）。
  * 每事件最多 regionStreamMaxRegionsPerEvent 个区域；发完 30s 复查一轮；
- * 维度变化由 ModLifecycle.requestRecheck 提前唤醒。一切异常吞 FINE，绝不影响服务端。
+ * 维度清单变化由 ModLifecycle 调 requestRecheck() 提前唤醒。一切异常吞 FINE，绝不影响服务端。
  *
  * 校验语义（§3.3）：事件 xor 字段 = store 头里的原始 RGB24 u32 校验（发送前已读）；
  * sha1 = 本次压缩字节的 hex；两者都发，消费端各自可验。
@@ -33,9 +33,9 @@ import java.util.zip.Deflater;
 public final class RegionStreamer {
 
     private static final Logger LOG = Logger.getLogger("queqiao_map_web.mapstore");
-    /** 区域边长（区块数），与 MapStore 存储格式一致 */
-    private static final int SIDE = 512;
-    private static final int REGION_RGB_BYTES = SIDE * SIDE * 3;
+    /** 区域像素边长与 RGB24 负载字节数：与 MapStore 存储格式同源，不重复定义 */
+    private static final int SIDE = MapStore.SIDE;
+    private static final int REGION_RGB_BYTES = MapStore.PAYLOAD_BYTES;
     /** 一轮发完后的复查周期 */
     private static final long RECHECK_MS = 30_000;
 

@@ -11,7 +11,6 @@ import net.yumezawa.queqiao_map_web.testsupport.FakePlatformAdapter;
 import net.yumezawa.queqiao_map_web.testsupport.RecordingEventSink;
 import net.yumezawa.queqiao_map_web.testsupport.QueqiaoToolBootstrap;
 import org.junit.jupiter.api.BeforeAll;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;

@@ -233,11 +233,11 @@ public final class BackfillEngine {
         return worldSaveRoot.resolve("dimension").resolve(folder).resolve("region");
     }
 
-    /** 维度最低建筑高度：the_nether/the_end → 0，其余按 1.18+ overworld 的 -64 */
+    /** 维度最低建筑高度：the_nether/the_end → 0，其余按 1.18+ overworld 的 -64
+     * （dimFolder 恒补命名空间前缀，故只需比带前缀的形式） */
     private static int minBuildHeightFor(String dim) {
         String f = MapStore.dimFolder(dim);
-        if (f.equals("minecraft_the_nether") || f.equals("the_nether")
-                || f.equals("minecraft_the_end") || f.equals("the_end")) {
+        if (f.equals("minecraft_the_nether") || f.equals("minecraft_the_end")) {
             return 0;
         }
         return DEFAULT_MIN_BUILD_HEIGHT;

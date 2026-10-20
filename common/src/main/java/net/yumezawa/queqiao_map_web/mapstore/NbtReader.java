@@ -7,7 +7,6 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.logging.Logger;
 
 /**
  * 独立 NBT 读取器（零 MC 依赖，蓝图 §2.2；big-endian，TAG 0–12）。
@@ -17,13 +16,11 @@ import java.util.logging.Logger;
  * TAG_ByteArray → {@code byte[]}；TAG_IntArray → {@code int[]}；TAG_LongArray → {@code long[]}；
  * TAG_String → {@code String}。</p>
  *
- * <p>说明：蓝图原文写 "tags 0-11"，但 1.16+ 的 BlockStates 是 TAG_LongArray(12)，
- * 已按 lead 确认修正为支持到 12。List 元素类型取列表头声明的类型（NBT 规范如此，异质表无法表示，
- * 读出不匹配自然抛 IOException）。所有解析异常向上抛 IOException，由调用方吞掉记 FINE。</p>
+ * <p>说明：支持 TAG 0–12——1.16+ 的 BlockStates 必需 TAG_LongArray(12)。List 元素类型取列表头
+ * 声明的类型（NBT 规范如此，异质表无法表示，读出不匹配自然抛 IOException）。
+ * 所有解析异常向上抛 IOException，由调用方吞掉记 FINE。</p>
  */
 public final class NbtReader {
-
-    private static final Logger LOG = Logger.getLogger("queqiao_map_web.mapstore");
 
     /** TAG_End */
     static final int TAG_END = 0;
@@ -49,7 +46,7 @@ public final class NbtReader {
     static final int TAG_COMPOUND = 10;
     /** TAG_IntArray */
     static final int TAG_INT_ARRAY = 11;
-    /** TAG_LongArray（1.16+ BlockStates 必需；蓝图 0-11 为笔误，lead 已确认） */
+    /** TAG_LongArray（1.16+ BlockStates 必需） */
     static final int TAG_LONG_ARRAY = 12;
 
     /** 嵌套深度上限，防恶意/损坏数据栈溢出 */
