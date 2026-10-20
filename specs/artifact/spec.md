@@ -10,7 +10,7 @@
 - 给定 `:forge:build` 产物，当解压读取 META-INF/mods.toml，那么 modId 字段值 = mod_id（queqiao_map_web），全文无 `@[a-z_]+@` 匹配。
 - 给定 pack.mcmeta，那么 pack_format 数字 = 版本覆盖层 `pack_format_number`。
 
-**验证**：`ArtifactSmokeTest#tokensFullyRendered`（CI jar 冒烟步骤，现位于 [.github/workflows.disabled/ci.yml](../../.github/workflows.disabled/ci.yml)：unzip + grep 断言；CI/CD 暂停期间本地手动执行同一组断言）
+**验证**：jar 冒烟 [.github/scripts/smoke-jar.sh](../../.github/scripts/smoke-jar.sh) 断言 3（mods.toml 无 `@token@` 残留 + `modId="queqiao_map_web"` 行）；CI 暂停期间本地手动跑同一组断言
 
 ### REQ-ART-002 jar 含 common 类、绝不含 com.github.theword（不 shade）
 
@@ -19,7 +19,7 @@
 **场景**：
 - 给定 `:forge:build` 产物清单，那么含 `net/yumezawa/queqiao_map_web/sender/QueQiaoSink.class`（及 ModLifecycle 等全部 common 类），不含任何 `com/github/theword/` 条目。
 
-**验证**：`ArtifactSmokeTest#bundlesCommonNoBridgeClasses`（CI jar 冒烟步骤）
+**验证**：jar 冒烟 [.github/scripts/smoke-jar.sh](../../.github/scripts/smoke-jar.sh) 断言 5+6（common 类已并入、零 `com/github/theword/` 条目）
 
 ### REQ-ART-003 manifest Minecraft-Mod-ID=mod_id
 
@@ -28,7 +28,7 @@
 **场景**：
 - 给定产物 MANIFEST.MF，那么三个属性存在且 Minecraft-Mod-ID 与 gradle.properties 的 mod_id 逐字符相等。
 
-**验证**：`ArtifactSmokeTest#manifestModIdMatches`（CI jar 冒烟步骤）
+**验证**：jar 冒烟 [.github/scripts/smoke-jar.sh](../../.github/scripts/smoke-jar.sh) 断言 7（MANIFEST `Minecraft-Mod-ID`）
 
 ### REQ-ART-004 产物命名 <modid>-<加载器>-<mod版本>+mc<MC版本>.jar
 
@@ -37,4 +37,4 @@
 **场景**：
 - 给定 `:forge:build -PmcTarget=1.20.1` 完成，那么 `forge/build/libs/` 下 jar 名匹配 `^queqiao_map_web-forge-.+\+mc1\.20\.1\.jar$`。
 
-**验证**：`ArtifactSmokeTest#jarFileNamePattern`（CI jar 冒烟步骤）
+**验证**：jar 冒烟 [.github/scripts/smoke-jar.sh](../../.github/scripts/smoke-jar.sh) 断言 1（产物文件名正则）

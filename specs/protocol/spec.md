@@ -10,7 +10,7 @@
 - 给定构造任一事件，那么 eventName/postType/subType 三字段与上列字面量逐字符一致。
 - 给定消费端按 sub_type 字典路由，那么四个值之外不出现任何本 mod 的 sub_type。
 
-**验证**：`EventContractTest#subTypesFixedEventNameEqualsClass`
+**验证**：`ModLifecycleSmokeTest#fullLifecycleEmitsEventsInOrder`、`ProtocolContractTest#eventNameAndSubTypeLiterals`
 
 ### REQ-PROTO-002 DTO JSON 字段名 = 单单词 camelCase、不手写鹊桥自动字段
 
@@ -20,7 +20,7 @@
 - 给定 Gson 默认配置序列化 PlayerPosModel 与 TilePayloadModel，那么 JSON 键集合恰为上述字段名，无 snake_case、无 server_* 键。
 - 给定新增 DTO 字段，那么命名仍为单单词 camelCase，并登记进 REQ-PROTO-004 的基线快照。
 
-**验证**：`DtoFieldContractTest#jsonFieldNamesSingleWordCamelCase`、`DtoFieldContractTest#noBridgeAutoFields`
+**验证**：`ProtocolContractTest#playerModelJsonFieldNames`、`ProtocolContractTest#tileModelJsonFieldNames`、`ProtocolContractTest#eventPayloadJsonShape`
 
 ### REQ-PROTO-003 dimension 一律 registry key
 
@@ -30,7 +30,7 @@
 - 给定下界玩家，当上报 player_move，那么 dimension=`minecraft:the_nether`。
 - 给定 mod 包含自定义维度，当上报 map_dimensions，那么每项均匹配 `[a-z0-9_.-]+:[a-z0-9/._-]+`。
 
-**验证**：`DimensionKeyContractTest#registryKeyFormatOnly`（假适配器注入，断言透传不改写）
+**验证**：`ModLifecycleSmokeTest#fullLifecycleEmitsEventsInOrder`、`ProtocolContractTest#dimensionRegistryKeyPassthrough`（假适配器注入，断言透传不改写）
 
 ### REQ-PROTO-004 协议字段只加不改，消费端忽略未知字段
 

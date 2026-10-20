@@ -10,7 +10,7 @@
 - 给定同一 8×8 区域 6 个脏区块进入同一批，那么产出 1 块 size=8 瓦片（128×128 像素索引，58 个缺失像素为 0）。
 - 给定同一区域仅 3 个脏区块，那么产出 3 块 size=1 瓦片。
 
-**验证**：`TileQueueTest#regionMerge8WhenAtLeast4Dirty`
+**验证**：`TileQueueTest#fourChunksMergeIntoSize8`、`TileQueueTest#smallRegionPackedPerChunk`
 
 ### REQ-TILE-002 zlib-pal8 编码 + sha1 校验可还原
 
@@ -20,7 +20,7 @@
 - 给定已知 RGB 样本调 pack，那么 Base64 解码后 inflate 得 side² 字节，逐像素下标可回查 palette；SHA-1(decompressed 压缩字节) hex == payload.sha1。
 - 给定 format 常量被引用处，那么值恒为字面量 `zlib-pal8`（编码变化必须用新 format 字符串，见 REQ-PROTO-004）。
 
-**验证**：`TopBlockRendererTest#zlibPal8Sha1Roundtrip`
+**验证**：`TileQueueTest#firstFlushTilesShouldCarryRealColorIndices`、`TopBlockRendererTest#singleChunkRoundTrip`、`TopBlockRendererTest#mergedTileFillAndHoles`
 
 ### REQ-TILE-003 瓦片按位置去重（pending putIfAbsent），sha1 为内容寻址指纹；重发抑制发生在消费端
 
@@ -30,7 +30,7 @@
 - 给定同一区块坐标连续入队两次，当 onTick 刷写，那么该坐标只被渲染/打包一次。
 - 给定区块被标脏但顶层方块未变，当重采打包，那么新 payload 的 sha1 与上次一致（消费端据此跳过）。
 
-**验证**：`TileQueueTest#pendingDedupByPositionKey`、`TopBlockRendererTest#sameContentSameSha1`
+**验证**：`TileQueueTest#enqueueDedupsByPosition`、`TopBlockRendererTest#sha1IsContentAddressed`
 
 ### REQ-TILE-004 pending_cap 队列封顶、溢出静默丢弃
 
@@ -39,7 +39,7 @@
 **场景**：
 - 给定队列已满（1024 条），当继续入队 100 个脏区块，那么全部被拒、队列仍为 1024、warning 只出现一次。
 
-**验证**：`TileQueueTest#pendingCapOverflowSilentlyDropped`
+**验证**：`TileQueueTest#pendingCapSilentlyDropsOverflow`、`TileQueueTest#failedFlushRequeuesThenRecovers`
 
 ### REQ-TILE-005 每 tick 主线程渲染硬上限 maxChunkRendersPerTick=64（停服 drain 豁免）
 
@@ -49,7 +49,7 @@
 - 给定 pending=500 且 batchSize=64，当单次 onTick，那么本次 renderChunk 调用 ≤64 次，余量留队列。
 - 给定 drain 被调用且通道可用，那么循环分批直至队列清空，不因每-tick-上限中途退出。
 
-**验证**：`TileQueueTest#renderCappedPerTick`、`TileQueueDrainTest#drainExemptFromTickCap`
+**验证**：`TileQueueTest#defaultRenderCapIs64`、`TileQueueTest#loweredRenderCapRespected`
 
 ### REQ-TILE-006 flush 写穿本地地图库 + publishPalette 门对外暴露
 

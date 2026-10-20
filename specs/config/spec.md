@@ -10,7 +10,7 @@
 - 给定空的配置根目录，当 `MapExtConfig.load`，那么 `QueQiao/queqiao_map_web.yml` 被创建，内容含 `enabled: false`，返回对象 enabled=false。
 - 给定文件不可写，当 load，那么一条 warning 日志，返回默认对象，无异常外抛。
 
-**验证**：`MapExtConfigTest#missingFileWritesDefaults`
+**验证**：`MapExtConfigTest#missingFileYieldsAllDefaults`
 
 ### REQ-CFG-002 queqiao_map_web.yml 极简解析（布尔/数值，注释与未知键忽略）
 
@@ -19,7 +19,7 @@
 **场景**：
 - 给定文件含 `# 注释` 行、`enabled: true # 开`、`unknown_key: x`，当 load，那么 enabled=true 生效、unknown_key 被忽略、其余键保持默认。
 
-**验证**：`MapExtConfigTest#minimalParseIgnoresCommentsAndUnknownKeys`
+**验证**：`MapExtConfigTest#parsesValuesAndIgnoresCommentsAndUnknownKeys`
 
 ### REQ-CFG-003 非法值回退默认不抛异常
 
@@ -29,7 +29,7 @@
 - 给定 `pending_cap: abc`，当 load，那么 pendingCap 保持默认 1024，无异常。
 - 给定 `batch_size: 0`，当 load，那么钳制为 1。
 
-**验证**：`MapExtConfigTest#invalidValueFallsBackToDefault`
+**验证**：`MapExtConfigTest#illegalNumbersKeepDefaults`、`MapExtConfigTest#outOfRangeValuesClamped`
 
 ### REQ-CFG-004 地图库新键（回填/区域流默认与钳制）
 

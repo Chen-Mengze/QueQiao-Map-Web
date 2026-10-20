@@ -10,7 +10,7 @@
 - 给定玩家已上报于 P0，当下一 tick 位移 1.0 格且距上次发送 < moveIdleIntervalMs，那么该玩家不在本轮输出。
 - 给定首次见到的玩家，当采样，那么无视节流立即上报（首见全量）。
 
-**验证**：`PositionSamplerTest#belowThresholdNotSent`
+**验证**：`PositionSamplerTest#smallMoveNotSent`、`PositionSamplerTest#thresholdBoundaryCountsAsIdle`
 
 ### REQ-SAMP-002 静止心跳 ~0.67Hz
 
@@ -19,7 +19,7 @@
 **场景**：
 - 给定玩家静止不动，当以固定 nowMs 连续采样跨 4500ms，那么恰好 3 次上报（每 1500ms 一次）。
 
-**验证**：`PositionSamplerTest#idleHeartbeatEvery1500ms`
+**验证**：`PositionSamplerTest#idleHeartbeatCadence`
 
 ### REQ-SAMP-003 移动限速 ~2.5Hz
 
@@ -28,7 +28,7 @@
 **场景**：
 - 给定玩家每 tick 位移 > 1.5 格，当连续采样 1600ms 窗口，那么该玩家至多 4 次上报。
 
-**验证**：`PositionSamplerTest#movingRateLimited400ms`
+**验证**：`PositionSamplerTest#movingRateLimited`
 
 ### REQ-SAMP-004 玩家离线自动清理
 
@@ -37,4 +37,4 @@
 **场景**：
 - 给定玩家 A 在上一批出现过而本批快照缺失，当本轮 sample 返回，那么 state 不再含 A；下一批 A 重新出现时无视节流上报。
 
-**验证**：`PositionSamplerTest#offlinePlayerStateCleared`
+**验证**：`PositionSamplerTest#offlineStateAutoCleaned`

@@ -10,7 +10,7 @@
 - 给定新增任一文件 import GlobalContext，当守卫执行，那么该文件被列出、CI 失败。
 - 给定仅 QueQiaoSink.java 有 `import com.github.theword.queqiao.tool.GlobalContext;`，那么守卫通过。
 
-**验证**：`GlobalContextGuardTest#onlyQueQiaoSinkReferencesGlobalContext`（common/src/test 源码扫描）+ ci.yml 架构守卫步骤
+**验证**：`GlobalContextIsolationTest#globalContextOnlyReferencedInSender`（测试内源码扫描 + ci.yml 架构守卫同口径）
 
 ### REQ-SEND-002 未就绪前零发送（唯一通道、无降级直连）
 
@@ -20,4 +20,4 @@
 - 给定鹊桥类在 classpath 但未 init，当调用 QueQiaoSink.send(event)，那么返回 false，事件未达任何通道。
 - 给定整仓库扫描发送侧出口，那么 `sendEvent` 调用点仅存在于 QueQiaoSink.java。
 
-**验证**：`QueQiaoSinkTest#sendFalseWhenNotReady`、`GlobalContextGuardTest#singleSendExitPoint`
+**验证**：`QueQiaoSinkProbeTest#probeIsFalseBeforeQueqiaoReady`、`QueQiaoSinkProbeTest#sendReturnsFalseWhenChannelThrows`

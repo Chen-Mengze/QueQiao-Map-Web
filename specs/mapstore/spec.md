@@ -4,23 +4,23 @@
 
 ### REQ-MS-001 mca 区域文件读取与容错
 
-**SHALL**：`RegionFileReader.listChunks(Path)` 与 `readChunkNbt(Path, ChunkLocation)` 必须直接解析 Anvil region 文件：头部 = 位置表 1024×(u32 扇区偏移, u32 扇区数)（8192B）+ 修改时间表 1024×u32（4096B），共 **12288B**（蓝图 §2.1 括注的 8192B 指位置表，实际头部按 Anvil 实况 12288B 解析，lead 已确认）；位置索引 `index=(x&31)|((z&31)<<5)`，偏移或大小为 0 = 该列不存在；块记录在 `扇区偏移×4096`：u32 长度（含压缩字节）+ u8 压缩类型（1=gzip、2=zlib、3=不压缩，其余抛 IOException）+ 压缩负载。ChunkLocation 携带绝对块坐标（由文件名 `r.<rx>.<rz>.mca` 折算）。`listChunks` 一切 IO 异常吞掉记 FINE 返回部分/空列表；`readChunkNbt` 声明 `throws IOException` 由调用方吞掉。
+**SHALL**：`RegionFileReader.listChunks(Path)` 与 `readChunkNbt(Path, ChunkLocation)` 必须直接解析 Anvil region 文件：头部 = 位置表 1024×(u32 扇区偏移, u32 扇区数)（8192B）+ 修改时间表 1024×u32（4096B），共 **12288B**（蓝图 §2.1 括注的 8192B 指位置表，实际头部按 Anvil 实况 12288B 解析）；位置索引 `index=(x&31)|((z&31)<<5)`，偏移或大小为 0 = 该列不存在；块记录在 `扇区偏移×4096`：u32 长度（含压缩字节）+ u8 压缩类型（1=gzip、2=zlib、3=不压缩，其余抛 IOException）+ 压缩负载。ChunkLocation 携带绝对块坐标（由文件名 `r.<rx>.<rz>.mca` 折算）。`listChunks` 一切 IO 异常吞掉记 FINE 返回部分/空列表；`readChunkNbt` 声明 `throws IOException` 由调用方吞掉。
 
 **场景**：
 - 给定 @TempDir 合成 r.0.0.mca（2 个 zlib 压缩块 + 若干偏移 0 槽位 + 1 个非法压缩类型块），那么 listChunks 恰返回 2 个存在块且坐标折算正确；readChunkNbt 对合法块解压成功、对非法压缩类型抛 IOException。
 - 给定头部截断/文件不存在的 region，那么 listChunks 返回空列表且不抛异常（记 FINE）。
 
-**验证**：`RegionFileReaderTest#listAndReadSyntheticMcaRoundtrip`、`RegionFileReaderTest#truncatedHeaderYieldsEmptyList`
+**验证**：`RegionFileReaderTest#listAndReadSyntheticMcaRoundtrip`、`RegionFileReaderTest#truncatedHeaderYieldsEmptyList`、`RegionFileReaderTest#readChunkBeyondEofThrows`
 
 ### REQ-MS-002 NBT 双格式解码（big-endian，TAG 0–12）
 
-**SHALL**：`NbtReader.readCompound(InputStream)` 必须按大端解析 NBT，根必须是 TAG_Compound；返回树映射：Compound→`Map<String,Object>`、List→`List<Object>`（元素类型取列表头声明类型）、ByteArray→`byte[]`、IntArray→`int[]`、LongArray→`long[]`、String→`String`、数值→对应包装类型。支持 TAG 0–12，**含 TAG_LongArray(12)**（1.16+ BlockStates 必需；蓝图 §2.2 写 0-11 为笔误，lead 已确认）。嵌套深度 ≤512、数组长度 ≤2^24，超限或流损坏抛 IOException 由调用方吞掉。
+**SHALL**：`NbtReader.readCompound(InputStream)` 必须按大端解析 NBT，根必须是 TAG_Compound；返回树映射：Compound→`Map<String,Object>`、List→`List<Object>`（元素类型取列表头声明类型）、ByteArray→`byte[]`、IntArray→`int[]`、LongArray→`long[]`、String→`String`、数值→对应包装类型。支持 TAG 0–12，**含 TAG_LongArray(12)**（1.16+ BlockStates 必需；蓝图 §2.2 写 0-11 为笔误）。嵌套深度 ≤512、数组长度 ≤2^24，超限或流损坏抛 IOException 由调用方吞掉。
 
 **场景**：
 - 给定手写字节夹具（嵌套 Compound + 各标量 + byte[]/int[]/long[] + List<Compound> + 根名空串），那么 readCompound 返回的树逐字段等值。
 - 给定根类型非 Compound 或数据中途截断，那么抛 IOException（不外溢到调用链之外，调用方吞记 FINE）。
 
-**验证**：`NbtReaderTest#readAllTagTypesRoundtrip`、`NbtReaderTest#malformedRootThrows`
+**验证**：`NbtReaderTest#readAllTagTypesRoundtrip`、`NbtReaderTest#malformedRootThrows`、`NbtReaderTest#byteArrayTag12DecodesForBlockStates`
 
 ### REQ-MS-003 ChunkTopScanner 位打包（现代对齐 + 旧式补齐兜底）
 
@@ -31,7 +31,7 @@
 - 给定 1.20.2 夹具（根 palettes + block_states.palette_ref + data）与旧式补齐打包夹具（长数组多于对齐所需），那么两种打包解出同一顶面。
 - 给定整列空气与 Y<-64 的石块（minBuildHeight=-64），那么该列 = null。
 
-**验证**：`ChunkTopScannerTest#modernAlignedSectionsTopState`、`ChunkTopScannerTest#modern1202PalettesFormat`、`ChunkTopScannerTest#paddedPackingFallbackAndAirNull`
+**验证**：`ChunkTopScannerTest#modernAlignedSectionsTopState`、`ChunkTopScannerTest#modern1202PalettesFormat`、`ChunkTopScannerTest#paddedPackingFallbackAndAirNull`、`ChunkTopScannerTest#minBuildHeightSkip`
 
 ### REQ-MS-004 BlockColors 内置表与灰兜底
 
@@ -62,11 +62,11 @@
 - 给定含 2 块的合成 r.0.0.mca，当 runScanCycle，那么 store 出现 r.0.0.qms 且 (8,8) 列颜色 = 对应方块色；把 mca 的 lastModified 拨旧后改内容再 runScanCycle，那么区域未被重写（mtime 不变 = 跳过生效）；把 mca 时间拨新，那么被重写。
 - 给定 maxChunksPerSec=1、region 含 2 块，当一次同步扫描周期，那么耗时 ≥0.8s（第二块等待令牌）。
 
-**验证**：`BackfillEngineTest#backfillPaintsRegionAndSkipsUnchanged`、`BackfillEngineTest#throttleSlowsPerChunk`
+**验证**：`BackfillEngineTest#backfillPaintsRegionAndSkipsUnchanged`、`BackfillEngineTest#throttleSlowsPerChunk`、`BackfillEngineTest#startStopIsSafe`
 
 ### REQ-MS-007 区域流 xor 跳过 + 节流
 
-**SHALL**：区域流（RegionStreamer，tile 域队友实现）巡检 `MapStore.listRegions(dim)`：`xor32 == lastSentXor` 的区域必须跳过不发送且 `lastSentXor` 保持原值；变化区域发送成功后调用 `MapStore.markSent(dim,rx,rz,xor32)`（载荷 zlib-pal8、附压缩字节 sha1，且调色板事件先于区域事件）。节流语义按蓝图 §3.2：令牌桶按**压缩字节数**限速，配置键 `region_stream_bytes_per_sec`（默认 65536）；单事件内区域个数 ≤ `region_stream_max_regions_per_event`（默认 4）；发完后 30s 内复查一轮（worker 周期）。mapstore 侧保证 xor32 写端必重算、markSent 只动 lastSentXor 不动 xor32/mtime（REQ-MS-005）。
+**SHALL**：区域流（RegionStreamer）巡检 `MapStore.listRegions(dim)`：`xor32 == lastSentXor` 的区域必须跳过不发送且 `lastSentXor` 保持原值；变化区域发送成功后调用 `MapStore.markSent(dim,rx,rz,xor32)`（载荷 zlib-pal8、附压缩字节 sha1，且调色板事件先于区域事件）。节流语义按蓝图 §3.2：令牌桶按**压缩字节数**限速，配置键 `region_stream_bytes_per_sec`（默认 65536）；单事件内区域个数 ≤ `region_stream_max_regions_per_event`（默认 4）；发完后 30s 内复查一轮（worker 周期）。mapstore 侧保证 xor32 写端必重算、markSent 只动 lastSentXor 不动 xor32/mtime（REQ-MS-005）。
 
 **场景**：
 - 给定 store 中 3 个区域、其中 2 个已发送（xor32==lastSentXor），当一轮巡检，那么仅 1 个变化区域被发送且其 lastSentXor 被更新；再巡检一轮，那么零发送；随后改动任一区域使 xor 变化，那么该区域被重发。
