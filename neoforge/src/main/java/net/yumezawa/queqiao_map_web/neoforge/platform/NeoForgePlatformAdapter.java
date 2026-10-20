@@ -25,6 +25,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 
 /**
@@ -48,12 +49,27 @@ public final class NeoForgePlatformAdapter implements PlatformAdapter {
         this.server = server;
     }
 
+    /**
+     * 入口在 ServerStartedEvent 里调用一次：把本适配器注册到游戏总线。
+     * register/unregister 按适配器实例成对进行（同 Forge 侧）——服务端重启后不会出现
+     * 同一 tick 被两个旧适配器重复采样的监听器泄漏。
+     */
     public void registerHooks() {
         NeoForge.EVENT_BUS.register(this);
     }
 
+    /** 入口在 ServerStoppingEvent 里调用：摘掉总线监听，温和收尾后台线程 */
     public void shutdown() {
-        pool.shutdownNow();
+        NeoForge.EVENT_BUS.unregister(this);
+        pool.shutdown();
+        try {
+            if (!pool.awaitTermination(5, TimeUnit.SECONDS)) {
+                pool.shutdownNow();
+            }
+        } catch (InterruptedException e) {
+            pool.shutdownNow();
+            Thread.currentThread().interrupt();
+        }
     }
 
     @Override
@@ -78,7 +94,8 @@ public final class NeoForgePlatformAdapter implements PlatformAdapter {
             for (int lz = 0; lz < 16; lz++) {
                 int wx = (pos.x << 4) + lx;
                 int wz = (pos.z << 4) + lz;
-                int topY = level.getHeight(Heightmap.Types.OCEAN_FLOOR, wx, wz); // 1.21.1: Types（复数）
+                // 1.21.1: Types（复数）；heightmap 存「最高匹配块 Y + 1」，取块必须 -1（同 Forge 侧结论）
+                int topY = level.getHeight(Heightmap.Types.OCEAN_FLOOR, wx, wz) - 1;
                 BlockPos blockPos = new BlockPos(wx, topY, wz);
                 BlockState state = level.getBlockState(blockPos);
                 if (state.isAir()) continue;

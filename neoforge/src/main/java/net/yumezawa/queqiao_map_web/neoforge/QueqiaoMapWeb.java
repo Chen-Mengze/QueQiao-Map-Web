@@ -10,8 +10,9 @@ import net.yumezawa.queqiao_map_web.ModLifecycle;
 import net.yumezawa.queqiao_map_web.neoforge.platform.NeoForgePlatformAdapter;
 
 /**
- * NeoForge 入口（M4 里程碑接入编译）。1.21.1 起：@Mod 在 net.neoforged.fml.common，
+ * NeoForge 入口（阶段三接入编译）。1.21.1 起：@Mod 在 net.neoforged.fml.common，
  * 游戏事件走 NeoForge.EVENT_BUS（mod 总线只管自己的注册）。
+ * 停服顺序与 forge / fabric 入口同构——先 adapter.shutdown 再 ModLifecycle.stop（AGENT.md §4.7）。
  */
 @Mod(ModLifecycle.MOD_ID)
 public final class QueqiaoMapWeb {
@@ -30,10 +31,10 @@ public final class QueqiaoMapWeb {
     }
 
     private void onServerStopping(ServerStoppingEvent event) {
+        if (adapter == null) return; // 兜底：ServerStarted 未触发时未装配，无需 stop
+        // 停服顺序铁律：先摘总线监听 + 后台池收尾，再排空队列
+        adapter.shutdown();
         ModLifecycle.get().stop();
-        if (adapter != null) {
-            adapter.shutdown();
-            adapter = null;
-        }
+        adapter = null;
     }
 }
